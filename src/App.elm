@@ -32,7 +32,7 @@ type alias State =
     , redirectUri : Url
     , time : Int
     , token : Maybe Token
-    , videos : Dict Int Video
+    , videos : Dict Int VideoListItem
     , current : Int
     }
 
@@ -59,4 +59,21 @@ type alias PlayVideoData =
 type alias ListItem a =
     { checked : Bool
     , item : a
+    }
+
+
+type alias VideoListItem =
+    { video: Video
+    , startAt : Maybe Int
+    , endAt : Maybe Int
+    , editOpen : Bool
+    }
+
+
+videoToListItem : Video -> VideoListItem
+videoToListItem video =
+    { video = video
+    , startAt = Nothing
+    , endAt = Nothing
+    , editOpen = False
     }

@@ -15,6 +15,10 @@ type alias Video =
     , title : String
     , startAt : Maybe Int
     , endAt : Maybe Int
+    , position : Int
+    , playlistId : String
+    , itemId : String
+    , note : Maybe String
     }
 
 
@@ -24,11 +28,19 @@ decoder =
     Field.require "title" Decode.string <| \title ->
     Field.require "startAt" (Decode.nullable Decode.int) <| \startAt ->
     Field.require "endAt" (Decode.nullable Decode.int) <| \endAt ->
+    Field.require "position" Decode.int <| \position ->
+    Field.require "playlistId" Decode.string <| \playlistId ->
+    Field.require "itemId" Decode.string <| \itemId ->
+    Field.require "note" (Decode.nullable Decode.string) <| \note ->
     Decode.succeed
         { id = id
         , title = title
         , startAt = startAt
         , endAt = endAt
+        , position = position
+        , playlistId = playlistId
+        , itemId = itemId
+        , note = note
         }
 
 
@@ -39,4 +51,8 @@ encode video =
         , ( "title", Encode.string video.title )
         , ( "startAt", Encode.maybe Encode.int video.startAt )
         , ( "endAt", Encode.maybe Encode.int video.endAt )
+        , ( "position", Encode.int video.position )
+        , ( "playlistId", Encode.string video.playlistId )
+        , ( "itemId", Encode.string video.itemId )
+        , ( "note", Encode.maybe Encode.string video.note )
         ]

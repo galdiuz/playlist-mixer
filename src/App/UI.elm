@@ -41,6 +41,10 @@ render state =
                 { onPress = Just <| Msg.GetUserPlaylists
                 , label = El.text "Get list"
                 }
+            , if not <| Dict.isEmpty state.videos then
+                renderVideoList state
+              else
+                El.none
             , if not <| Dict.isEmpty state.lists then
                 renderPlaylistList state
               else
@@ -50,10 +54,6 @@ render state =
                 , El.scrollbarY
                 ]
                 <| List.map El.text state.messages
-            , if not <| Dict.isEmpty state.videos then
-                renderVideoList state
-              else
-                El.none
             ]
 
 
@@ -111,14 +111,92 @@ renderPlaylistList state =
 
 renderVideoList state =
     El.column
-        []
+        [ El.scrollbarY
+        ]
         [ El.column
-            [ El.spacing 5
+            [ El.spacing 10
             , El.padding 5
             ]
             <| List.map
-                (\(idx, video) ->
-                    El.text <| String.fromInt idx ++ ". " ++ video.title
+                (\(index, listItem) ->
+                    El.row
+                        [ El.spacing 5
+                        ]
+                        [ El.text <| String.fromInt index ++ "."
+                        , El.column
+                            [ El.width El.fill
+                            ]
+                            [ El.paragraph [] [ El.text listItem.video.title ]
+                            , El.row
+                                [ El.spacing 5
+                                ]
+                                [ Input.button
+                                    []
+                                    { onPress = Nothing
+                                    , label = El.text "Play"
+                                    }
+                                , El.text "-"
+                                , Input.button
+                                    []
+                                    { onPress = Just <| Msg.ToggleEditVideo index True
+                                    , label = El.text "Edit"
+                                    }
+                                ]
+                            , if listItem.editOpen then
+                                El.row
+                                    [ El.spacing 10
+                                    ]
+                                    [ El.row
+                                        [ El.spacing 2
+                                        ]
+                                        [ Input.text
+                                            [ El.width <| El.px 75
+                                            ]
+                                            { label = Input.labelLeft [] <| El.text "Start:"
+                                            , onChange = Msg.SetVideoStartAt index
+                                            , placeholder = Just <| Input.placeholder [] <| El.text "123"
+                                            , text =
+                                                case listItem.startAt of
+                                                    Just startAt ->
+                                                        String.fromInt startAt
+                                                    Nothing ->
+                                                        ""
+                                            }
+                                        , El.text "s"
+                                        ]
+                                    , El.row
+                                        [ El.spacing 2
+                                        ]
+                                        [ Input.text
+                                            [ El.width <| El.px 75
+                                            ]
+                                            { label = Input.labelLeft [] <| El.text "End:"
+                                            , onChange = Msg.SetVideoEndAt index
+                                            , placeholder = Just <| Input.placeholder [] <| El.text "123"
+                                            , text =
+                                                case listItem.endAt of
+                                                    Just endAt ->
+                                                        String.fromInt endAt
+                                                    Nothing ->
+                                                        ""
+                                            }
+                                        , El.text "s"
+                                        ]
+                                    , Input.button
+                                        buttonStyle
+                                        { onPress = Just <| Msg.SaveVideoTimes index
+                                        , label = El.text "Save"
+                                        }
+                                    , Input.button
+                                        buttonStyle
+                                        { onPress = Just <| Msg.ToggleEditVideo index False
+                                        , label = El.text "Cancel"
+                                        }
+                                    ]
+                              else
+                                El.none
+                            ]
+                        ]
                 )
                 (Dict.toList state.videos)
         ]

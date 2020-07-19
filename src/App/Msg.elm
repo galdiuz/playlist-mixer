@@ -39,3 +39,7 @@ type Msg
     | SetListAll
     | SetListNone
     | PlayList
+    | ToggleEditVideo Int Bool
+    | SetVideoStartAt Int String
+    | SetVideoEndAt Int String
+    | SaveVideoTimes Int

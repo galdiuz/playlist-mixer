@@ -82,6 +82,7 @@ init flags url navigationKey =
             flags.storedList.value
                 |> Decode.decodeValue (Decode.list Video.decoder)
                 |> Result.withDefault []
+                |> List.map App.videoToListItem
                 |> List.indexedMap Tuple.pair
                 |> Dict.fromList
     in
@@ -173,7 +174,9 @@ update msg state =
                     { clientId = "1004146990872-svm4c3j6nof3afhjbjsf4mask09kc85n.apps.googleusercontent.com"
                     , redirectUri = state.redirectUri
                     , scope =
-                        [ "https://www.googleapis.com/auth/youtube.readonly"
+                        -- [ "https://www.googleapis.com/auth/youtube.readonly"
+                        -- ]
+                        [ "https://www.googleapis.com/auth/youtube"
                         ]
                     , state = Just <| convertBytes bytes
                     , url = { emptyUrl | host = "accounts.google.com", path = "/o/oauth2/v2/auth" }
@@ -334,6 +337,7 @@ update msg state =
                             { state
                                 | videos =
                                     videos
+                                        |> List.map App.videoToListItem
                                         |> List.indexedMap Tuple.pair
                                         |> Dict.fromList
                             }
@@ -387,6 +391,97 @@ update msg state =
             state
                 |> Cmd.Extra.withCmd (Ports.createPlayer App.UI.playerId)
 
+        ToggleEditVideo index bool ->
+            { state
+                | videos =
+                    Dict.update
+                        index
+                        ( Maybe.map
+                            (\listItem ->
+                                { listItem
+                                    | editOpen = bool
+                                    , startAt = listItem.video.startAt
+                                    , endAt = listItem.video.endAt
+                                }
+                            )
+                        )
+                        state.videos
+            }
+                |> Cmd.Extra.withNoCmd
+
+        SetVideoStartAt index string ->
+            { state
+                | videos =
+                    Dict.update
+                        index
+                        ( Maybe.map
+                            (\listItem ->
+                                { listItem
+                                    | startAt =
+                                        case ( string, String.toInt string ) of
+                                            ( "", _ ) ->
+                                                Nothing
+
+                                            ( _, Just int ) ->
+                                                Just int
+
+                                            _  ->
+                                                listItem.startAt
+                                }
+                            )
+                        )
+                        state.videos
+            }
+                |> Cmd.Extra.withNoCmd
+
+        SetVideoEndAt index string ->
+            { state
+                | videos =
+                    Dict.update
+                        index
+                        ( Maybe.map
+                            (\listItem ->
+                                { listItem
+                                    | endAt =
+                                        case ( string, String.toInt string ) of
+                                            ( "", _ ) ->
+                                                Nothing
+
+                                            ( _, Just int ) ->
+                                                Just int
+
+                                            _  ->
+                                                listItem.endAt
+                                }
+                            )
+                        )
+                        state.videos
+            }
+                |> Cmd.Extra.withNoCmd
+
+        SaveVideoTimes index ->
+            let
+                _ = Debug.log "listitem" <| Dict.get index state.videos
+            in
+            state
+                |> Cmd.Extra.withCmd
+                    ( case Dict.get index state.videos of
+                        Just listItem ->
+                            let
+                                video = listItem.video
+                            in
+                            Youtube.Api.updatePlaylistVideo
+                                { video
+                                    | startAt = listItem.startAt
+                                    , endAt = listItem.endAt
+                                }
+                                state.token
+                                (Debug.log "result" >> always Msg.NoOp)
+
+                        Nothing ->
+                            Cmd.none
+                    )
+
 
 saveListToStorage : List Video -> Cmd msg
 saveListToStorage videos =
@@ -403,7 +498,7 @@ playVideo state =
             state
                 |> Cmd.Extra.withCmd
                     ( Ports.playVideo
-                        { videoId = video.id
+                        { videoId = video.video.id
                         , startSeconds = Maybe.withDefault -1 video.startAt
                         , endSeconds = Maybe.withDefault -1 video.endAt
                         }
