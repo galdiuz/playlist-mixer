@@ -1,0 +1,92 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Main</title>
+    <script src="elm.js"></script>
+    <script src="https://www.youtube.com/iframe_api"></script>
+</head>
+
+<body>
+    <div id="elm"></div>
+    <script src="https://unpkg.com/elm-debug-transformer@latest/dist/elm-console-debug.js"></script>
+    <script>ElmConsoleDebug.register({simple_mode: true, debug: false, limit: 10000});</script>
+    <script>
+        var app = Elm.Main.init({
+            node: document.getElementById('elm'),
+            flags: {
+                time: Date.now(),
+                bytes: getBytes(),
+                token: getToken(),
+                storedList: {
+                    key: 'list',
+                    value: JSON.parse(localStorage.getItem('list')),
+                },
+            },
+        });
+        var player;
+        var noOp = () => {};
+
+        function onYouTubeIframeAPIReady() {
+            app.ports && app.ports.onYouTubeApiReady && app.ports.onYouTubeApiReady.send();
+        };
+
+        function getBytes() {
+            const bytes = localStorage.getItem('bytes');
+            return bytes ? bytes.split(',').map(x => parseInt(x, 10)) : [];
+        }
+
+        function getToken() {
+            const token = localStorage.getItem('token');
+            return token ? JSON.parse(token) : null;
+        }
+
+        app.ports && app.ports.createPlayer && app.ports.createPlayer.subscribe(function(element) {
+            player = new YT.Player(element, {
+                width: '640',
+                height: '480',
+                events: {
+                    'onReady': (app.ports && app.ports.onPlayerReady) ? app.ports.onPlayerReady.send : noOp,
+                    'onStateChange': (app.ports && app.ports.onPlayerStateChange) ? app.ports.onPlayerStateChange.send : noOp,
+                    'onError': (app.ports && app.ports.onPlayerError) ? app.ports.onPlayerError.send : noOp,
+                },
+            });
+        });
+
+        app.ports && app.ports.playVideo && app.ports.playVideo.subscribe(data => {
+            player.loadVideoById(data);
+        });
+
+        app.ports && app.ports.saveToStorage && app.ports.saveToStorage.subscribe(data => {
+            localStorage.setItem(
+                data.key,
+                JSON.stringify(data.value)
+            );
+        });
+
+        app.ports && app.ports.loadFromStorage && app.ports.loadFromStorage.subscribe(key => {
+            app.ports && app.ports.receiveFromStorage && app.ports.receiveFromStorage.send({
+                key: key,
+                value: localStorage.getItem(key),
+            });
+        });
+
+        app.ports && app.ports.removeFromStorage && app.ports.removeFromStorage.subscribe(key => {
+            localStorage.removeItem(key);
+        });
+
+        app.ports && app.ports.generateRandomBytes && app.ports.generateRandomBytes.subscribe(n => {
+            const buffer = new Uint8Array(n);
+            crypto.getRandomValues(buffer);
+            const bytes = Array.from(buffer);
+            localStorage.setItem('bytes', bytes);
+            app.ports && app.ports.receiveRandomBytes && app.ports.receiveRandomBytes.send(bytes);
+        });
+
+        app.ports && app.ports.consoleErr && app.ports.consoleErr.subscribe(msg => console.error(msg));
+
+        app.ports && app.ports.onYouTubeApiReady || console.warn('Port onYouTubeApiReady not found.');
+        app.ports && app.ports.onPlayerStateChange || console.warn('Port onPlayerStateChange not found.');
+    </script>
+</body>
+</html>
