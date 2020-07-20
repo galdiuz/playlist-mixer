@@ -43,3 +43,5 @@ type Msg
     | SetVideoStartAt Int String
     | SetVideoEndAt Int String
     | SaveVideoTimes Int
+    | ValidateVideoStartAt Int
+    | ValidateVideoEndAt Int

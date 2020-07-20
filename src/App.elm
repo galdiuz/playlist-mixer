@@ -64,8 +64,10 @@ type alias ListItem a =
 
 type alias VideoListItem =
     { video: Video
-    , startAt : Maybe Int
-    , endAt : Maybe Int
+    , startAt : String
+    , startAtError : Maybe String
+    , endAt : String
+    , endAtError : Maybe String
     , editOpen : Bool
     }
 
@@ -73,7 +75,9 @@ type alias VideoListItem =
 videoToListItem : Video -> VideoListItem
 videoToListItem video =
     { video = video
-    , startAt = Nothing
-    , endAt = Nothing
+    , startAt = ""
+    , startAtError = Nothing
+    , endAt = ""
+    , endAtError = Nothing
     , editOpen = False
     }

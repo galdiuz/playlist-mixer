@@ -188,15 +188,6 @@ updatePlaylistVideoBody video =
         ]
 
 
-mapParam : String -> (a -> Encode.Value) -> Maybe a -> Maybe (String, Encode.Value)
-mapParam key encoder maybe =
-    Maybe.map
-        (\val ->
-            (key, encoder val)
-        )
-        maybe
-
-
 decodeNote : Maybe String -> (Maybe String, Maybe Int, Maybe Int)
 decodeNote maybeString =
     case (maybeString, noteRegex) of
@@ -214,9 +205,9 @@ decodeNote maybeString =
                                 )
 
                             _ ->
-                                (Nothing, Nothing, Nothing)
+                                (Just string, Nothing, Nothing)
                     )
-                |> Maybe.withDefault (Nothing, Nothing, Nothing)
+                |> Maybe.withDefault (Just string, Nothing, Nothing)
 
         _ ->
             (Nothing, Nothing, Nothing)

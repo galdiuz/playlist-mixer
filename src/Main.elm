@@ -13,7 +13,9 @@ import Json.Encode as Encode
 import Maybe.Extra
 import OAuth
 import OAuth.Implicit as OAuth
+import String.Format
 import Time
+import Tuple2
 import Url exposing (Url)
 
 import App exposing (Flags, State)
@@ -400,8 +402,10 @@ update msg state =
                             (\listItem ->
                                 { listItem
                                     | editOpen = bool
-                                    , startAt = listItem.video.startAt
-                                    , endAt = listItem.video.endAt
+                                    , startAt = secondsToString listItem.video.startAt
+                                    , startAtError = Nothing
+                                    , endAt = secondsToString listItem.video.endAt
+                                    , endAtError = Nothing
                                 }
                             )
                         )
@@ -417,16 +421,7 @@ update msg state =
                         ( Maybe.map
                             (\listItem ->
                                 { listItem
-                                    | startAt =
-                                        case ( string, String.toInt string ) of
-                                            ( "", _ ) ->
-                                                Nothing
-
-                                            ( _, Just int ) ->
-                                                Just int
-
-                                            _  ->
-                                                listItem.startAt
+                                    | startAt = string
                                 }
                             )
                         )
@@ -442,16 +437,7 @@ update msg state =
                         ( Maybe.map
                             (\listItem ->
                                 { listItem
-                                    | endAt =
-                                        case ( string, String.toInt string ) of
-                                            ( "", _ ) ->
-                                                Nothing
-
-                                            ( _, Just int ) ->
-                                                Just int
-
-                                            _  ->
-                                                listItem.endAt
+                                    | endAt = string
                                 }
                             )
                         )
@@ -460,27 +446,186 @@ update msg state =
                 |> Cmd.Extra.withNoCmd
 
         SaveVideoTimes index ->
-            let
-                _ = Debug.log "listitem" <| Dict.get index state.videos
-            in
-            state
-                |> Cmd.Extra.withCmd
-                    ( case Dict.get index state.videos of
-                        Just listItem ->
-                            let
-                                video = listItem.video
-                            in
-                            Youtube.Api.updatePlaylistVideo
-                                { video
-                                    | startAt = listItem.startAt
-                                    , endAt = listItem.endAt
-                                }
-                                state.token
-                                (Debug.log "result" >> always Msg.NoOp)
+            case Dict.get index state.videos of
+                Just listItem ->
+                    case (parseTime listItem.startAt, parseTime listItem.endAt) of
+                        (Ok startAt, Ok endAt) ->
+                            case validateTimes startAt endAt of
+                                Ok _ ->
+                                    let
+                                        video = listItem.video
+                                    in
+                                    state
+                                        |> Cmd.Extra.withCmd
+                                            ( Youtube.Api.updatePlaylistVideo
+                                                { video
+                                                    | startAt = startAt
+                                                    , endAt = endAt
+                                                }
+                                                state.token
+                                                (Debug.log "result" >> always Msg.NoOp)
+                                            )
 
-                        Nothing ->
-                            Cmd.none
-                    )
+                                Err error ->
+                                    -- TODO
+                                    state
+                                        |> Cmd.Extra.withNoCmd
+
+                        (Err error, _) ->
+                            -- TODO
+                            state
+                                |> Cmd.Extra.withNoCmd
+
+                        (_, Err error) ->
+                            -- TODO
+                            state
+                                |> Cmd.Extra.withNoCmd
+
+                Nothing ->
+                    state
+                        |> Cmd.Extra.withNoCmd
+
+        ValidateVideoStartAt index ->
+            case Dict.get index state.videos of
+                Just listItem ->
+                    let
+                        (startAt, startAtError) =
+                            case parseTime listItem.startAt of
+                                Ok seconds ->
+                                    (secondsToString seconds, Nothing)
+
+                                Err error ->
+                                    (listItem.startAt, Just error)
+                    in
+                    { state
+                        | videos =
+                            Dict.update
+                                index
+                                ( Maybe.map
+                                    (\listItem_ ->
+                                        { listItem_
+                                            | startAt = startAt
+                                            , startAtError = startAtError
+                                        }
+                                    )
+                                )
+                                state.videos
+                    }
+                        |> Cmd.Extra.withNoCmd
+
+                Nothing ->
+                    state
+                        |> Cmd.Extra.withNoCmd
+
+        ValidateVideoEndAt index ->
+            case Dict.get index state.videos of
+                Just listItem ->
+                    let
+                        (endAt, endAtError) =
+                            case parseTime listItem.endAt of
+                                Ok seconds ->
+                                    (secondsToString seconds, Nothing)
+
+                                Err error ->
+                                    (listItem.endAt, Just error)
+                    in
+                    { state
+                        | videos =
+                            Dict.update
+                                index
+                                ( Maybe.map
+                                    (\listItem_ ->
+                                        { listItem_
+                                            | endAt = endAt
+                                            , endAtError = endAtError
+                                        }
+                                    )
+                                )
+                                state.videos
+                    }
+                        |> Cmd.Extra.withNoCmd
+
+                Nothing ->
+                    state
+                        |> Cmd.Extra.withNoCmd
+
+
+
+parseTime : String -> Result String (Maybe Int)
+parseTime string =
+    if string == "" then
+        Ok Nothing
+
+    else
+        case String.split ":" string of
+            [ minuteString, secondString ] ->
+                case (String.toInt minuteString, String.toInt secondString) of
+                    (Just minutes, Just seconds) ->
+                        Ok <| Just <| minutes * 60 + seconds
+
+                    _ ->
+                        Err "Invalid time format."
+
+            [ secondString ] ->
+                case String.toInt secondString of
+                    Just seconds ->
+                        Ok <| Just seconds
+
+                    Nothing ->
+                        Err "Invalid time format."
+
+            _ ->
+                Err "Invalid time format."
+
+
+validateTimes : Maybe Int -> Maybe Int -> Result String ()
+validateTimes maybeStartAt maybeEndAt =
+    case (maybeStartAt, maybeEndAt) of
+        (Just startAt, Just endAt) ->
+            if startAt < 0 then
+                Err "Start time cannot be negative."
+
+            else if endAt < 0 then
+                Err "End time cannot be negative."
+
+            else if startAt >= endAt then
+                Err "Start time cannot be greater than end time."
+
+            else
+                Ok ()
+
+        (Just startAt, Nothing) ->
+            if startAt < 0 then
+                Err "Start time cannot be negative."
+
+            else
+                Ok ()
+
+        (Nothing, Just endAt) ->
+            if endAt < 0 then
+                Err "End time cannot be negative."
+
+            else
+                Ok ()
+
+        (Nothing, Nothing) ->
+            Ok ()
+
+
+
+secondsToString : Maybe Int -> String
+secondsToString maybe =
+    case maybe of
+        Just seconds ->
+            if seconds >= 60 then
+                "{{ }}:{{}}"
+                    |> String.Format.value (String.fromInt <| seconds // 60)
+                    |> String.Format.value (String.padLeft 2 '0' <| String.fromInt <| remainderBy 60 seconds)
+            else
+                String.fromInt seconds
+
+        Nothing ->
+            ""
 
 
 saveListToStorage : List Video -> Cmd msg
@@ -499,8 +644,8 @@ playVideo state =
                 |> Cmd.Extra.withCmd
                     ( Ports.playVideo
                         { videoId = video.video.id
-                        , startSeconds = Maybe.withDefault -1 video.startAt
-                        , endSeconds = Maybe.withDefault -1 video.endAt
+                        , startSeconds = Maybe.withDefault -1 video.video.startAt
+                        , endSeconds = Maybe.withDefault -1 video.video.endAt
                         }
                     )
 
