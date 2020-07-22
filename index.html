@@ -18,14 +18,12 @@
                 time: Date.now(),
                 bytes: getBytes(),
                 token: getToken(),
-                storedList: {
-                    key: 'list',
-                    value: JSON.parse(localStorage.getItem('list')),
-                },
+                playlistInStorage: localStorage.getItem('playlist') ? true : false,
             },
         });
         var player;
         var noOp = () => {};
+        var popup;
 
         function onYouTubeIframeAPIReady() {
             app.ports && app.ports.onYouTubeApiReady && app.ports.onYouTubeApiReady.send();
@@ -41,7 +39,25 @@
             return token ? JSON.parse(token) : null;
         }
 
-        app.ports && app.ports.createPlayer && app.ports.createPlayer.subscribe(function(element) {
+        window.addEventListener('storage', event => {
+            if (event.storageArea !== localStorage || !event.key) {
+                return;
+            }
+
+            if (event.newValue === null) {
+                app.ports && app.ports.storageDeleted && app.ports.storageDeleted.send(event.key);
+            } else {
+                try {
+                    var val = JSON.parse(event.newValue);
+                    app.ports && app.ports.storageChanged && app.ports.storageChanged.send({
+                        key: event.key,
+                        value: val,
+                    });
+                } catch {}
+            }
+        }, false);
+
+        app.ports && app.ports.createPlayer && app.ports.createPlayer.subscribe(element => {
             player = new YT.Player(element, {
                 width: '640',
                 height: '480',
@@ -81,6 +97,14 @@
             const bytes = Array.from(buffer);
             localStorage.setItem('bytes', bytes);
             app.ports && app.ports.receiveRandomBytes && app.ports.receiveRandomBytes.send(bytes);
+        });
+
+        app.ports && app.ports.openPopup && app.ports.openPopup.subscribe(url => {
+            popup = window.open(url, 'popup', 'height=600,width=450');
+        });
+
+        app.ports && app.ports.closePopup && app.ports.closePopup.subscribe(d => {
+            popup && popup.close();
         });
 
         app.ports && app.ports.consoleErr && app.ports.consoleErr.subscribe(msg => console.error(msg));

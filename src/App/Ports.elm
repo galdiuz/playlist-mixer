@@ -15,8 +15,13 @@ port saveToStorage : App.StorageValue -> Cmd msg
 port loadFromStorage : String -> Cmd msg
 port removeFromStorage : String -> Cmd msg
 port receiveFromStorage : (App.StorageValue -> msg) -> Sub msg
+port storageChanged : (App.StorageValue -> msg) -> Sub msg
+port storageDeleted : (String -> msg) -> Sub msg
 
 port generateRandomBytes : Int -> Cmd msg
 port receiveRandomBytes : (List Int -> msg) -> Sub msg
 
 port consoleErr : String -> Cmd msg
+
+port openPopup : String -> Cmd msg
+port closePopup : () -> Cmd msg

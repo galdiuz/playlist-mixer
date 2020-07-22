@@ -18,6 +18,8 @@ type Msg
     | PlayerError Encode.Value
     | SignIn
     | ReceiveFromStorage App.StorageValue
+    | StorageChanged App.StorageValue
+    | StorageDeleted String
     | SetTime Time.Posix
     | ReceiveRandomBytes (List Int)
     | GetUserPlaylists

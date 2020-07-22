@@ -11,20 +11,23 @@ import App
 encodeToken : App.Token -> Encode.Value
 encodeToken token =
     Encode.object
-        [ ( "token", Encode.string <| OAuth.tokenToString token.token )
-        , ( "expires", Encode.int token.expires )
+        [ ( "expires", Encode.int token.expires )
+        , ( "scopes", Encode.list Encode.string token.scopes )
+        , ( "token", Encode.string <| OAuth.tokenToString token.token )
         ]
 
 
 decodeToken : Decode.Decoder App.Token
 decodeToken =
     Field.require "token" Decode.string <| \token ->
+    Field.require "scopes" (Decode.list Decode.string) <| \scopes ->
     Field.require "expires" Decode.int <| \expires ->
     case OAuth.tokenFromString token of
         Just t ->
             Decode.succeed
-                { token = t
-                , expires = expires
+                { expires = expires
+                , scopes = scopes
+                , token = t
                 }
         _ ->
-            Decode.fail "Unable to parse token"
+            Decode.fail "Unable to parse token."

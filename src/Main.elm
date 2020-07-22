@@ -44,30 +44,25 @@ main =
 init : Flags -> Url -> Navigation.Key -> ( State, Cmd Msg )
 init flags url navigationKey =
     let
-        redirectUri =
-            { url | query = Nothing, fragment = Nothing }
-
-        clearUrl =
-            Navigation.replaceUrl navigationKey (Url.toString redirectUri)
-
         urlToken =
             case OAuth.parseToken url of
                 OAuth.Empty ->
                     Nothing
 
                 OAuth.Success data ->
-                    case data.state of
-                        Just dataState ->
+                    Maybe.andThen
+                        (\dataState ->
                             if convertBytes flags.bytes == dataState then
                                 Just
-                                    { token = data.token
-                                    , expires = flags.time + 1000 * Maybe.withDefault 0 data.expiresIn
+                                    { expires = flags.time + 1000 * Maybe.withDefault 0 data.expiresIn
+                                    , scopes = data.scope
+                                    , token = data.token
                                     }
+                                    |> Maybe.Extra.filter (\t -> t.expires > flags.time)
                             else
                                 Nothing
-
-                        _ ->
-                            Nothing
+                        )
+                        data.state
 
                 OAuth.Error data ->
                     Nothing
@@ -78,36 +73,27 @@ init flags url navigationKey =
                 |> Maybe.Extra.filter (\t -> t.expires > flags.time)
 
         token =
-            Maybe.Extra.or flagsToken urlToken
-
-        videos =
-            flags.storedList.value
-                |> Decode.decodeValue (Decode.list Video.decoder)
-                |> Result.withDefault []
-                |> List.map App.videoToListItem
-                |> List.indexedMap Tuple.pair
-                |> Dict.fromList
+            Maybe.Extra.or urlToken flagsToken
     in
     { navigationKey = navigationKey
-    , redirectUri = redirectUri
+    , redirectUri = { url | query = Nothing, fragment = Nothing }
     , time = flags.time
     , token = token
     , lists = Dict.empty
     , messages = []
-    , videos = videos
+    , videos = Dict.empty
     , current = 0
+    , playlistInStorage = flags.playlistInStorage
     }
         |> Cmd.Extra.withCmd
-            clearUrl
-        |> Cmd.Extra.addCmd
             ( case token of
                 Just t ->
                     Ports.saveToStorage
-                        { key = "token"
+                        { key = tokenStorageKey
                         , value = App.Json.encodeToken t
                         }
                 Nothing ->
-                    Ports.removeFromStorage "token"
+                    Ports.removeFromStorage tokenStorageKey
             )
 
 
@@ -128,6 +114,8 @@ subscriptions state =
         , Ports.receiveFromStorage ReceiveFromStorage
         , Time.every 1000 SetTime
         , Ports.receiveRandomBytes ReceiveRandomBytes
+        , Ports.storageChanged StorageChanged
+        , Ports.storageDeleted StorageDeleted
         ]
 
 
@@ -176,9 +164,8 @@ update msg state =
                     { clientId = "1004146990872-svm4c3j6nof3afhjbjsf4mask09kc85n.apps.googleusercontent.com"
                     , redirectUri = state.redirectUri
                     , scope =
-                        -- [ "https://www.googleapis.com/auth/youtube.readonly"
-                        -- ]
-                        [ "https://www.googleapis.com/auth/youtube"
+                        [ "https://www.googleapis.com/auth/youtube.readonly"
+                        , "https://www.googleapis.com/auth/youtube"
                         ]
                     , state = Just <| convertBytes bytes
                     , url = { emptyUrl | host = "accounts.google.com", path = "/o/oauth2/v2/auth" }
@@ -189,7 +176,7 @@ update msg state =
                     ( authorization
                         |> OAuth.makeAuthorizationUrl
                         |> Url.toString
-                        |> Navigation.load
+                        |> Ports.openPopup
                     )
 
         ReceiveFromStorage { key, value } ->
@@ -198,11 +185,66 @@ update msg state =
                     Decode.decodeValue Decode.string value
                         |> Debug.log "value"
             in
-            ( state, Cmd.none )
+            if key == playlistStorageKey then
+                { state |
+                    videos =
+                        value
+                            |> Decode.decodeValue (Decode.list Video.decoder)
+                            |> Result.withDefault []
+                            |> List.map App.videoToListItem
+                            |> List.indexedMap Tuple.pair
+                            |> Dict.fromList
+                }
+                    |> Cmd.Extra.withNoCmd
+
+            else
+                Cmd.Extra.withNoCmd state
+
+        StorageChanged { key, value } ->
+            if key == tokenStorageKey then
+                { state
+                    | token =
+                        value
+                            |> Decode.decodeValue App.Json.decodeToken
+                            |> Result.toMaybe
+                            |> Maybe.Extra.filter (\t -> t.expires > state.time)
+                }
+                    |> Cmd.Extra.withCmd (Ports.closePopup ())
+
+            else if key == playlistStorageKey then
+                { state
+                    | playlistInStorage = True
+                }
+                    |> Cmd.Extra.withNoCmd
+
+            else
+                Cmd.Extra.withNoCmd state
+
+        StorageDeleted key ->
+            if key == tokenStorageKey then
+                { state
+                    | token = Nothing
+                }
+                    |> Cmd.Extra.withNoCmd
+
+            else if key == playlistStorageKey then
+                { state
+                    | playlistInStorage = False
+                }
+                    |> Cmd.Extra.withNoCmd
+
+            else
+                Cmd.Extra.withNoCmd state
 
         SetTime time ->
-            { state | time = Time.posixToMillis time }
-                |> Cmd.Extra.withNoCmd
+            let
+                newState =
+                    { state
+                        | time = Time.posixToMillis time
+                    }
+            in
+            newState
+                |> Cmd.Extra.withCmd (checkTokenExpiration newState)
 
         GetUserPlaylists ->
             { state |
@@ -550,6 +592,24 @@ update msg state =
                         |> Cmd.Extra.withNoCmd
 
 
+checkTokenExpiration : State -> Cmd msg
+checkTokenExpiration state =
+    case state.token of
+        Just token ->
+            if token.expires < state.time then
+                Ports.removeFromStorage tokenStorageKey
+
+            else
+                Cmd.none
+
+        Nothing ->
+            Cmd.none
+
+
+tokenStorageKey : String
+tokenStorageKey =
+    "token"
+
 
 parseTime : String -> Result String (Maybe Int)
 parseTime string =
@@ -617,20 +677,22 @@ secondsToString : Maybe Int -> String
 secondsToString maybe =
     case maybe of
         Just seconds ->
-            if seconds >= 60 then
-                "{{ }}:{{}}"
-                    |> String.Format.value (String.fromInt <| seconds // 60)
-                    |> String.Format.value (String.padLeft 2 '0' <| String.fromInt <| remainderBy 60 seconds)
-            else
-                String.fromInt seconds
+            "{{ }}:{{}}"
+                |> String.Format.value (String.fromInt <| seconds // 60)
+                |> String.Format.value (String.padLeft 2 '0' <| String.fromInt <| remainderBy 60 seconds)
 
         Nothing ->
             ""
 
 
+playlistStorageKey : String
+playlistStorageKey =
+    "playlist"
+
+
 saveListToStorage : List Video -> Cmd msg
 saveListToStorage videos =
-    { key = "list"
+    { key = playlistStorageKey
     , value = Encode.list Video.encode videos
     }
         |> Ports.saveToStorage

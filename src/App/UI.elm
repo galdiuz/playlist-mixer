@@ -23,7 +23,12 @@ render state =
             [ El.width El.fill
             , El.height El.fill
             ]
-            [ El.el
+            [ case state.token of
+                Just _ ->
+                    El.text "<Logged in>"
+                Nothing ->
+                    El.text "<Not logged in>"
+            , El.el
                 [ El.htmlAttribute <| HA.id playerId
                 ]
                 El.none

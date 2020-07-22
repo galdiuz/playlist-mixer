@@ -21,7 +21,8 @@ type alias Flags =
     { time : Int
     , bytes : List Int
     , token : Encode.Value
-    , storedList : StorageValue
+    , playlistInStorage : Bool
+    -- , storedList : StorageValue
     }
 
 
@@ -34,6 +35,7 @@ type alias State =
     , token : Maybe Token
     , videos : Dict Int VideoListItem
     , current : Int
+    , playlistInStorage : Bool
     }
 
 
@@ -44,8 +46,9 @@ type alias StorageValue =
 
 
 type alias Token =
-    { token : OAuth.Token
-    , expires : Int
+    { expires : Int
+    , scopes : List String
+    , token : OAuth.Token
     }
 
 
