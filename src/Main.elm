@@ -84,16 +84,18 @@ init flags url navigationKey =
     , videos = Dict.empty
     , current = 0
     , playlistInStorage = flags.playlistInStorage
+    , playlistStorageKey = flags.playlistStorageKey
+    , tokenStorageKey = flags.tokenStorageKey
     }
         |> Cmd.Extra.withCmd
             ( case token of
                 Just t ->
                     Ports.saveToStorage
-                        { key = tokenStorageKey
+                        { key = flags.tokenStorageKey
                         , value = App.Json.encodeToken t
                         }
                 Nothing ->
-                    Ports.removeFromStorage tokenStorageKey
+                    Ports.removeFromStorage flags.tokenStorageKey
             )
 
 
@@ -180,12 +182,7 @@ update msg state =
                     )
 
         ReceiveFromStorage { key, value } ->
-            let
-                _ =
-                    Decode.decodeValue Decode.string value
-                        |> Debug.log "value"
-            in
-            if key == playlistStorageKey then
+            if key == state.playlistStorageKey then
                 { state |
                     videos =
                         value
@@ -201,7 +198,7 @@ update msg state =
                 Cmd.Extra.withNoCmd state
 
         StorageChanged { key, value } ->
-            if key == tokenStorageKey then
+            if key == state.tokenStorageKey then
                 { state
                     | token =
                         value
@@ -211,7 +208,7 @@ update msg state =
                 }
                     |> Cmd.Extra.withCmd (Ports.closePopup ())
 
-            else if key == playlistStorageKey then
+            else if key == state.playlistStorageKey then
                 { state
                     | playlistInStorage = True
                 }
@@ -221,13 +218,13 @@ update msg state =
                 Cmd.Extra.withNoCmd state
 
         StorageDeleted key ->
-            if key == tokenStorageKey then
+            if key == state.tokenStorageKey then
                 { state
                     | token = Nothing
                 }
                     |> Cmd.Extra.withNoCmd
 
-            else if key == playlistStorageKey then
+            else if key == state.playlistStorageKey then
                 { state
                     | playlistInStorage = False
                 }
@@ -385,7 +382,7 @@ update msg state =
                                         |> List.indexedMap Tuple.pair
                                         |> Dict.fromList
                             }
-                                |> Cmd.Extra.withCmd (saveListToStorage videos)
+                                |> Cmd.Extra.withCmd (saveListToStorage state.playlistStorageKey videos)
 
                 Err err ->
                     { state
@@ -431,9 +428,13 @@ update msg state =
             }
                 |> Cmd.Extra.withNoCmd
 
-        PlayList ->
+        -- PlayList ->
+        --     state
+        --         |> Cmd.Extra.withCmd (Ports.createPlayer App.UI.playerId)
+
+        LoadListFromStorage ->
             state
-                |> Cmd.Extra.withCmd (Ports.createPlayer App.UI.playerId)
+                |> Cmd.Extra.withCmd (Ports.loadFromStorage state.playlistStorageKey)
 
         ToggleEditVideo index bool ->
             { state
@@ -597,18 +598,13 @@ checkTokenExpiration state =
     case state.token of
         Just token ->
             if token.expires < state.time then
-                Ports.removeFromStorage tokenStorageKey
+                Ports.removeFromStorage state.tokenStorageKey
 
             else
                 Cmd.none
 
         Nothing ->
             Cmd.none
-
-
-tokenStorageKey : String
-tokenStorageKey =
-    "token"
 
 
 parseTime : String -> Result String (Maybe Int)
@@ -672,7 +668,6 @@ validateTimes maybeStartAt maybeEndAt =
             Ok ()
 
 
-
 secondsToString : Maybe Int -> String
 secondsToString maybe =
     case maybe of
@@ -685,14 +680,9 @@ secondsToString maybe =
             ""
 
 
-playlistStorageKey : String
-playlistStorageKey =
-    "playlist"
-
-
-saveListToStorage : List Video -> Cmd msg
-saveListToStorage videos =
-    { key = playlistStorageKey
+saveListToStorage : String -> List Video -> Cmd msg
+saveListToStorage key videos =
+    { key = key
     , value = Encode.list Video.encode videos
     }
         |> Ports.saveToStorage

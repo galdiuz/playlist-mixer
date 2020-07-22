@@ -32,16 +32,18 @@ render state =
                 [ El.htmlAttribute <| HA.id playerId
                 ]
                 El.none
-            , El.text "Resume previous playlist"
+            , if state.playlistInStorage then
+                Input.button
+                    []
+                    { onPress = Just <| Msg.LoadListFromStorage
+                    , label = El.text "Resume previous playlist"
+                    }
+              else
+                El.none
             , Input.button
                 []
                 { onPress = Just Msg.SignIn
                 , label = El.text "Sign in"
-                }
-            , Input.button
-                []
-                { onPress = Just <| Msg.PlayList
-                , label = El.text "Load from storage"
                 }
             , Input.button
                 []
@@ -145,39 +147,42 @@ renderVideoList state =
                                 , El.text "-"
                                 , Input.button
                                     []
-                                    { onPress = Just <| Msg.ToggleEditVideo index True
+                                    { onPress = Just <| Msg.ToggleEditVideo index (not listItem.editOpen)
                                     , label = El.text "Edit"
                                     }
                                 ]
                             , if listItem.editOpen then
-                                El.row
-                                    [ El.spacing 10
-                                    ]
-                                    [ renderTimeInput
-                                        { error = listItem.startAtError
-                                        , label = "Start:"
-                                        , onChange = Msg.SetVideoStartAt index
-                                        , onLoseFocus = Msg.ValidateVideoStartAt index
-                                        , value = listItem.startAt
-                                        }
-                                    , renderTimeInput
-                                        { error = listItem.endAtError
-                                        , label = "End:"
-                                        , onChange = Msg.SetVideoEndAt index
-                                        , onLoseFocus = Msg.ValidateVideoEndAt index
-                                        , value = listItem.endAt
-                                        }
-                                    , Input.button
-                                        buttonStyle
-                                        { onPress = Just <| Msg.SaveVideoTimes index
-                                        , label = El.text "Save"
-                                        }
-                                    , Input.button
-                                        buttonStyle
-                                        { onPress = Just <| Msg.ToggleEditVideo index False
-                                        , label = El.text "Cancel"
-                                        }
-                                    ]
+                                if isEditAuthorized state then
+                                    El.row
+                                        [ El.spacing 10
+                                        ]
+                                        [ renderTimeInput
+                                            { error = listItem.startAtError
+                                            , label = "Start:"
+                                            , onChange = Msg.SetVideoStartAt index
+                                            , onLoseFocus = Msg.ValidateVideoStartAt index
+                                            , value = listItem.startAt
+                                            }
+                                        , renderTimeInput
+                                            { error = listItem.endAtError
+                                            , label = "End:"
+                                            , onChange = Msg.SetVideoEndAt index
+                                            , onLoseFocus = Msg.ValidateVideoEndAt index
+                                            , value = listItem.endAt
+                                            }
+                                        , Input.button
+                                            buttonStyle
+                                            { onPress = Just <| Msg.SaveVideoTimes index
+                                            , label = El.text "Save"
+                                            }
+                                        , Input.button
+                                            buttonStyle
+                                            { onPress = Just <| Msg.ToggleEditVideo index False
+                                            , label = El.text "Cancel"
+                                            }
+                                        ]
+                                else
+                                    El.text "Not authorized" -- TODO
                               else
                                 El.none
                             ]
@@ -185,6 +190,16 @@ renderVideoList state =
                 )
                 (Dict.toList state.videos)
         ]
+
+
+isEditAuthorized : State -> Bool
+isEditAuthorized state =
+    case state.token of
+        Just token ->
+            List.member "https://www.googleapis.com/auth/youtube" token.scopes
+
+        Nothing ->
+            False
 
 
 renderTimeInput :

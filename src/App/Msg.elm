@@ -40,7 +40,7 @@ type Msg
     | SetListChecked String Bool
     | SetListAll
     | SetListNone
-    | PlayList
+    | LoadListFromStorage
     | ToggleEditVideo Int Bool
     | SetVideoStartAt Int String
     | SetVideoEndAt Int String

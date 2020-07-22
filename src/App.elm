@@ -18,11 +18,12 @@ import Youtube.Video exposing (Video)
 
 
 type alias Flags =
-    { time : Int
-    , bytes : List Int
-    , token : Encode.Value
+    { bytes : List Int
     , playlistInStorage : Bool
-    -- , storedList : StorageValue
+    , playlistStorageKey : String
+    , time : Int
+    , token : Encode.Value
+    , tokenStorageKey : String
     }
 
 
@@ -36,6 +37,8 @@ type alias State =
     , videos : Dict Int VideoListItem
     , current : Int
     , playlistInStorage : Bool
+    , playlistStorageKey : String
+    , tokenStorageKey : String
     }
 
 
