@@ -12,9 +12,10 @@
     <!-- <script src="https://unpkg.com/elm-debug-transformer@latest/dist/elm-console-debug.js"></script> -->
     <!-- <script>ElmConsoleDebug.register({simple_mode: true, debug: false, limit: 10000});</script> -->
     <script>
-        var bytesStorageKey = 'bytes';
-        var tokenStorageKey = 'token';
-        var playlistStorageKey = 'playlist';
+        const bytesStorageKey = 'bytes';
+        const tokenStorageKey = 'token';
+        const playlistStorageKey = 'playlist';
+        const oauthClientId = '1004146990872-svm4c3j6nof3afhjbjsf4mask09kc85n.apps.googleusercontent.com';
         var player;
         var noOp = () => {};
         var popup;
@@ -25,6 +26,7 @@
                 bytes: getBytes(),
                 playlistInStorage: localStorage.getItem(playlistStorageKey) ? true : false,
                 playlistStorageKey: playlistStorageKey,
+                oauthClientId: oauthClientId,
                 time: Date.now(),
                 token: getToken(),
                 tokenStorageKey: tokenStorageKey,
@@ -36,7 +38,7 @@
         };
 
         function getBytes() {
-            const bytes = localStorage.getItem(bytesStorageKey);
+            const bytes = sessionStorage.getItem(bytesStorageKey);
             return bytes ? bytes.split(',').map(x => parseInt(x, 10)) : [];
         }
 
@@ -64,9 +66,13 @@
         }, false);
 
         app.ports && app.ports.createPlayer && app.ports.createPlayer.subscribe(element => {
+            if (player) {
+                app.ports && app.ports.onPlayerReady && app.ports.onPlayerReady.send();
+
+                return;
+            }
+
             player = new YT.Player(element, {
-                width: '640',
-                height: '480',
                 events: {
                     'onReady': (app.ports && app.ports.onPlayerReady) ? app.ports.onPlayerReady.send : noOp,
                     'onStateChange': (app.ports && app.ports.onPlayerStateChange) ? app.ports.onPlayerStateChange.send : noOp,
@@ -104,7 +110,7 @@
             const buffer = new Uint8Array(n);
             crypto.getRandomValues(buffer);
             const bytes = Array.from(buffer);
-            localStorage.setItem(bytesStorageKey, bytes);
+            sessionStorage.setItem(bytesStorageKey, bytes);
             app.ports && app.ports.receiveRandomBytes && app.ports.receiveRandomBytes.send(bytes);
         });
 

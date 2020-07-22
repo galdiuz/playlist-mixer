@@ -47,3 +47,5 @@ type Msg
     | SaveVideoTimes Int
     | ValidateVideoStartAt Int
     | ValidateVideoEndAt Int
+    | PlayVideo Int
+    | SetPlaylist (List Video)

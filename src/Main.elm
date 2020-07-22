@@ -2,6 +2,7 @@ module Main exposing (main)
 
 import Base64.Encode as Base64
 import Browser
+import Browser.Dom
 import Browser.Navigation as Navigation
 import Bytes.Encode as Bytes
 import Cmd.Extra
@@ -13,7 +14,11 @@ import Json.Encode as Encode
 import Maybe.Extra
 import OAuth
 import OAuth.Implicit as OAuth
+import Process
+import Random
+import Random.List
 import String.Format
+import Task
 import Time
 import Tuple2
 import Url exposing (Url)
@@ -23,6 +28,7 @@ import App.Msg as Msg exposing (Msg(..))
 import App.Json
 import App.UI
 import App.Ports as Ports
+import Google
 import Youtube.Api
 import Youtube.PlayerError as PlayerError
 import Youtube.PlayerState as PlayerState
@@ -86,6 +92,8 @@ init flags url navigationKey =
     , playlistInStorage = flags.playlistInStorage
     , playlistStorageKey = flags.playlistStorageKey
     , tokenStorageKey = flags.tokenStorageKey
+    , oauthClientId = flags.oauthClientId
+    , youtubeApiReady = False
     }
         |> Cmd.Extra.withCmd
             ( case token of
@@ -128,11 +136,13 @@ update msg state =
             ( state, Cmd.none )
 
         YouTubeApiReady ->
-            state
+            { state
+                | youtubeApiReady = True
+            }
                 |> Cmd.Extra.withNoCmd
 
         PlayerReady ->
-            playVideo state
+            playCurrentVideo state
 
         PlayerStateChange data ->
             let
@@ -145,16 +155,22 @@ update msg state =
             case Decode.decodeValue decoder data of
                 Ok PlayerState.Ended ->
                     { state
-                        | current = state.current + 1
+                        | current =
+                            if Dict.size state.videos > state.current + 1 then
+                                state.current + 1
+                            else
+                                0
                     }
-                        |> playVideo
+                        |> playCurrentVideo
+                        |> Cmd.Extra.andThen scrollToCurrent
+                        |> Cmd.Extra.andThen saveListToStorage
 
                 _ ->
                     state
                         |> Cmd.Extra.withNoCmd
 
         PlayerError data ->
-            ( state, Cmd.none )
+            Cmd.Extra.withNoCmd state
 
         SignIn ->
             state
@@ -163,14 +179,14 @@ update msg state =
         ReceiveRandomBytes bytes ->
             let
                 authorization =
-                    { clientId = "1004146990872-svm4c3j6nof3afhjbjsf4mask09kc85n.apps.googleusercontent.com"
+                    { clientId = state.oauthClientId
                     , redirectUri = state.redirectUri
                     , scope =
-                        [ "https://www.googleapis.com/auth/youtube.readonly"
-                        , "https://www.googleapis.com/auth/youtube"
+                        [ Google.oauthScopeYoutube
+                        , Google.oauthScopeYoutubeReadOnly
                         ]
                     , state = Just <| convertBytes bytes
-                    , url = { emptyUrl | host = "accounts.google.com", path = "/o/oauth2/v2/auth" }
+                    , url = Google.oauthUrl
                     }
             in
             state
@@ -183,16 +199,27 @@ update msg state =
 
         ReceiveFromStorage { key, value } ->
             if key == state.playlistStorageKey then
-                { state |
-                    videos =
-                        value
-                            |> Decode.decodeValue (Decode.list Video.decoder)
-                            |> Result.withDefault []
-                            |> List.map App.videoToListItem
-                            |> List.indexedMap Tuple.pair
-                            |> Dict.fromList
-                }
-                    |> Cmd.Extra.withNoCmd
+                case Decode.decodeValue App.Json.decodePlaylist value of
+                    Ok playlist ->
+                        { state
+                            | current = playlist.current
+                            , videos =
+                                playlist.videos
+                                    |> List.map App.videoToListItem
+                                    |> List.indexedMap Tuple.pair
+                                    |> Dict.fromList
+                        }
+                            |> Cmd.Extra.withCmd (Ports.createPlayer App.UI.playerId)
+                            -- |> Cmd.Extra.andThen
+                            --     (\s ->
+                            --         Process.sleep 100
+                            --             |> Task.andThen (always <| Task.succeed NoOp)
+                            --             |> Task.perform identity
+                            --     )
+                            |> Cmd.Extra.andThen scrollToCurrent
+
+                    Err _ ->
+                        Cmd.Extra.withNoCmd state -- TODO: Message
 
             else
                 Cmd.Extra.withNoCmd state
@@ -234,14 +261,10 @@ update msg state =
                 Cmd.Extra.withNoCmd state
 
         SetTime time ->
-            let
-                newState =
-                    { state
-                        | time = Time.posixToMillis time
-                    }
-            in
-            newState
-                |> Cmd.Extra.withCmd (checkTokenExpiration newState)
+            { state
+                | time = Time.posixToMillis time
+            }
+                |> checkTokenExpiration
 
         GetUserPlaylists ->
             { state |
@@ -375,20 +398,31 @@ update msg state =
                                 state
 
                         [] ->
-                            { state
-                                | videos =
-                                    videos
-                                        |> List.map App.videoToListItem
-                                        |> List.indexedMap Tuple.pair
-                                        |> Dict.fromList
-                            }
-                                |> Cmd.Extra.withCmd (saveListToStorage state.playlistStorageKey videos)
+                            state
+                                |> Cmd.Extra.withCmd
+                                    ( videos
+                                        |> Random.List.shuffle
+                                        |> Random.generate SetPlaylist
+                                    )
 
                 Err err ->
                     { state
                         | messages = "Error when fetching videos." :: state.messages
                     }
                         |> Cmd.Extra.withCmd (Ports.consoleErr err)
+
+        SetPlaylist videos ->
+            { state
+                | videos =
+                    videos
+                        |> List.map App.videoToListItem
+                        |> List.indexedMap Tuple.pair
+                        |> Dict.fromList
+                , lists = Dict.empty
+                , current = 0
+            }
+                |> saveListToStorage
+                |> Cmd.Extra.addCmd (Ports.createPlayer App.UI.playerId)
 
         SetListChecked key checked ->
             { state
@@ -427,10 +461,6 @@ update msg state =
                         state.lists
             }
                 |> Cmd.Extra.withNoCmd
-
-        -- PlayList ->
-        --     state
-        --         |> Cmd.Extra.withCmd (Ports.createPlayer App.UI.playerId)
 
         LoadListFromStorage ->
             state
@@ -592,19 +622,33 @@ update msg state =
                     state
                         |> Cmd.Extra.withNoCmd
 
+        PlayVideo index ->
+            case Dict.get index state.videos of
+                Just listItem ->
+                    { state
+                        | current = index
+                    }
+                        |> playCurrentVideo
+                        |> Cmd.Extra.andThen saveListToStorage
 
-checkTokenExpiration : State -> Cmd msg
+                Nothing ->
+                    state
+                        |> Cmd.Extra.withNoCmd
+
+
+checkTokenExpiration : State -> ( State, Cmd msg )
 checkTokenExpiration state =
     case state.token of
         Just token ->
             if token.expires < state.time then
-                Ports.removeFromStorage state.tokenStorageKey
+                state
+                    |> Cmd.Extra.withCmd (Ports.removeFromStorage state.tokenStorageKey)
 
             else
-                Cmd.none
+                Cmd.Extra.withNoCmd state
 
         Nothing ->
-            Cmd.none
+            Cmd.Extra.withNoCmd state
 
 
 parseTime : String -> Result String (Maybe Int)
@@ -680,16 +724,41 @@ secondsToString maybe =
             ""
 
 
-saveListToStorage : String -> List Video -> Cmd msg
-saveListToStorage key videos =
-    { key = key
-    , value = Encode.list Video.encode videos
-    }
-        |> Ports.saveToStorage
+saveListToStorage : State -> ( State, Cmd msg )
+saveListToStorage state =
+    let
+        videos =
+            state.videos
+                |> Dict.values
+                |> List.map .video
+    in
+    state
+        |> Cmd.Extra.withCmd
+            ( Ports.saveToStorage
+                { key = state.playlistStorageKey
+                , value = App.Json.encodePlaylist state.current videos
+                }
+            )
 
 
-playVideo : State -> ( State, Cmd msg )
-playVideo state =
+scrollToCurrent : State -> ( State, Cmd Msg )
+scrollToCurrent state =
+    state
+        |> Cmd.Extra.withCmd
+            ( Task.map3
+                (\video playlist playlistViewport ->
+                    playlistViewport.viewport.y + video.element.y - playlist.element.y
+                )
+                (Browser.Dom.getElement (App.UI.playlistVideoId state.current))
+                (Browser.Dom.getElement App.UI.playlistId)
+                (Browser.Dom.getViewportOf App.UI.playlistId)
+                |> Task.andThen (\y -> Browser.Dom.setViewportOf App.UI.playlistId 0 y)
+                |> Task.attempt (always NoOp)
+            )
+
+
+playCurrentVideo : State -> ( State, Cmd msg )
+playCurrentVideo state =
     case Dict.get state.current state.videos of
         Just video ->
             state
@@ -709,17 +778,6 @@ playVideo state =
 convertBytes : List Int -> String
 convertBytes =
     List.map Bytes.unsignedInt8 >> Bytes.sequence >> Bytes.encode >> Base64.bytes >> Base64.encode
-
-
-emptyUrl : Url
-emptyUrl =
-    { protocol = Url.Https
-    , host = ""
-    , path = ""
-    , port_ = Nothing
-    , query = Nothing
-    , fragment = Nothing
-    }
 
 
 httpErrorToString : Http.Error -> String

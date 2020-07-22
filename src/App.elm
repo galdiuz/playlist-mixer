@@ -19,6 +19,7 @@ import Youtube.Video exposing (Video)
 
 type alias Flags =
     { bytes : List Int
+    , oauthClientId : String
     , playlistInStorage : Bool
     , playlistStorageKey : String
     , time : Int
@@ -39,6 +40,8 @@ type alias State =
     , playlistInStorage : Bool
     , playlistStorageKey : String
     , tokenStorageKey : String
+    , oauthClientId : String
+    , youtubeApiReady : Bool
     }
 
 

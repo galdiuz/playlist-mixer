@@ -11,6 +11,7 @@ import Html.Attributes as HA
 
 import App exposing (State)
 import App.Msg as Msg exposing (Msg)
+import Google
 
 
 render : State -> Html Msg
@@ -30,6 +31,8 @@ render state =
                     El.text "<Not logged in>"
             , El.el
                 [ El.htmlAttribute <| HA.id playerId
+                , El.width <| El.maximum 640 <| El.fill
+                , El.height El.shrink
                 ]
                 El.none
             , if state.playlistInStorage then
@@ -45,11 +48,15 @@ render state =
                 { onPress = Just Msg.SignIn
                 , label = El.text "Sign in"
                 }
-            , Input.button
-                []
-                { onPress = Just <| Msg.GetUserPlaylists
-                , label = El.text "Get list"
-                }
+            , case state.token of
+                Just _ ->
+                    Input.button
+                        []
+                        { onPress = Just <| Msg.GetUserPlaylists
+                        , label = El.text "Get list"
+                        }
+                Nothing ->
+                    El.none
             , if not <| Dict.isEmpty state.videos then
                 renderVideoList state
               else
@@ -121,6 +128,8 @@ renderPlaylistList state =
 renderVideoList state =
     El.column
         [ El.scrollbarY
+        , El.height <| El.minimum 600 <| El.shrink
+        , El.htmlAttribute <| HA.id playlistId
         ]
         [ El.column
             [ El.spacing 10
@@ -130,29 +139,29 @@ renderVideoList state =
                 (\(index, listItem) ->
                     El.row
                         [ El.spacing 5
+                        , El.htmlAttribute <| HA.id <| playlistVideoId index
                         ]
-                        [ El.text <| String.fromInt index ++ "."
+                        [ El.text <| String.fromInt (index + 1) ++ "."
                         , El.column
                             [ El.width El.fill
                             ]
                             [ El.paragraph [] [ El.text listItem.video.title ]
                             , El.row
-                                [ El.spacing 5
+                                [ El.spacing 10
                                 ]
                                 [ Input.button
-                                    []
-                                    { onPress = Nothing
+                                    buttonStyle
+                                    { onPress = Just <| Msg.PlayVideo index
                                     , label = El.text "Play"
                                     }
-                                , El.text "-"
                                 , Input.button
-                                    []
+                                    buttonStyle
                                     { onPress = Just <| Msg.ToggleEditVideo index (not listItem.editOpen)
                                     , label = El.text "Edit"
                                     }
                                 ]
                             , if listItem.editOpen then
-                                if isEditAuthorized state then
+                                if Google.tokenHasWriteScope state.token then
                                     El.row
                                         [ El.spacing 10
                                         ]
@@ -182,7 +191,16 @@ renderVideoList state =
                                             }
                                         ]
                                 else
-                                    El.text "Not authorized" -- TODO
+                                    El.row
+                                        [ El.spacing 10
+                                        ]
+                                        [ El.text "Not logged in / not authorized"
+                                        , Input.button
+                                                buttonStyle
+                                                { onPress = Just Msg.SignIn
+                                                , label = El.text "Sign in"
+                                                }
+                                        ]
                               else
                                 El.none
                             ]
@@ -190,16 +208,6 @@ renderVideoList state =
                 )
                 (Dict.toList state.videos)
         ]
-
-
-isEditAuthorized : State -> Bool
-isEditAuthorized state =
-    case state.token of
-        Just token ->
-            List.member "https://www.googleapis.com/auth/youtube" token.scopes
-
-        Nothing ->
-            False
 
 
 renderTimeInput :
@@ -259,3 +267,13 @@ buttonStyle =
 playerId : String
 playerId =
     "player"
+
+
+playlistId : String
+playlistId =
+    "playlist"
+
+
+playlistVideoId : Int -> String
+playlistVideoId index =
+    "playlist-video-" ++ String.fromInt index
