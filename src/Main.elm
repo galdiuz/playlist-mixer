@@ -3,6 +3,7 @@ module Main exposing (main)
 import Base64.Encode as Base64
 import Browser
 import Browser.Navigation as Navigation
+import Bytes exposing (Bytes)
 import Bytes.Encode as Bytes
 import Cmd.Extra
 import Dict
@@ -10,9 +11,11 @@ import Http
 import Json.Decode as Decode
 import Json.Decode.Field as Field
 import Json.Encode as Encode
+import Json.Encode.Extra as Encode
 import Maybe.Extra
 import OAuth
-import OAuth.Implicit as OAuth
+-- import OAuth.Implicit as OAuth
+import OAuth.AuthorizationCode.PKCE as OAuth
 import String.Format
 import Time
 import Tuple2
@@ -44,28 +47,40 @@ main =
 init : Flags -> Url -> Navigation.Key -> ( State, Cmd Msg )
 init flags url navigationKey =
     let
-        urlToken =
-            case OAuth.parseToken url of
+        oauthData =
+            case OAuth.parseCode url of
+                OAuth.Success data ->
+                    Just data
+
                 OAuth.Empty ->
                     Nothing
 
-                OAuth.Success data ->
-                    Maybe.andThen
-                        (\dataState ->
-                            if convertBytes flags.bytes == dataState then
-                                Just
-                                    { expires = flags.time + 1000 * Maybe.withDefault 0 data.expiresIn
-                                    , scopes = data.scope
-                                    , token = data.token
-                                    }
-                                    |> Maybe.Extra.filter (\t -> t.expires > flags.time)
-                            else
-                                Nothing
-                        )
-                        data.state
-
                 OAuth.Error data ->
                     Nothing
+
+        urlToken =
+            Nothing
+            -- case OAuth.parseToken url of
+            --     OAuth.Empty ->
+            --         Nothing
+
+            --     OAuth.Success data ->
+            --         Maybe.andThen
+            --             (\dataState ->
+            --                 if convertBytes flags.bytes == dataState then
+            --                     Just
+            --                         { expires = flags.time + 1000 * Maybe.withDefault 0 data.expiresIn
+            --                         , scopes = data.scope
+            --                         , token = data.token
+            --                         }
+            --                         |> Maybe.Extra.filter (\t -> t.expires > flags.time)
+            --                 else
+            --                     Nothing
+            --             )
+            --             data.state
+
+            --     OAuth.Error data ->
+            --         Nothing
 
         flagsToken =
             Decode.decodeValue App.Json.decodeToken flags.token
@@ -86,17 +101,33 @@ init flags url navigationKey =
     , playlistInStorage = flags.playlistInStorage
     , playlistStorageKey = flags.playlistStorageKey
     , tokenStorageKey = flags.tokenStorageKey
+    , oauthClientId = flags.oauthClientId
+    , oauthCodeVerifier = Nothing
+    , oauthState = Nothing
     }
         |> Cmd.Extra.withCmd
-            ( case token of
-                Just t ->
+            ( case oauthData of
+                Just data ->
                     Ports.saveToStorage
-                        { key = flags.tokenStorageKey
-                        , value = App.Json.encodeToken t
+                        { key = "code"
+                        , value =
+                            Encode.object
+                                [ ( "code", Encode.string data.code )
+                                , ( "state", Encode.maybe Encode.string data.state )
+                                ]
                         }
                 Nothing ->
                     Ports.removeFromStorage flags.tokenStorageKey
             )
+            -- ( case token of
+            --     Just t ->
+            --         Ports.saveToStorage
+            --             { key = flags.tokenStorageKey
+            --             , value = App.Json.encodeToken t
+            --             }
+            --     Nothing ->
+            --         Ports.removeFromStorage flags.tokenStorageKey
+            -- )
 
 
 view : State -> Browser.Document Msg
@@ -158,27 +189,50 @@ update msg state =
 
         SignIn ->
             state
-                |> Cmd.Extra.withCmd (Ports.generateRandomBytes 16)
+                |> Cmd.Extra.withCmd (Ports.generateRandomBytes 80)
 
         ReceiveRandomBytes bytes ->
             let
-                authorization =
-                    { clientId = "1004146990872-svm4c3j6nof3afhjbjsf4mask09kc85n.apps.googleusercontent.com"
-                    , redirectUri = state.redirectUri
-                    , scope =
-                        [ "https://www.googleapis.com/auth/youtube.readonly"
-                        , "https://www.googleapis.com/auth/youtube"
-                        ]
-                    , state = Just <| convertBytes bytes
-                    , url = { emptyUrl | host = "accounts.google.com", path = "/o/oauth2/v2/auth" }
-                    }
+                stateBytes =
+                    List.take 16 bytes
+
+                codeBytes =
+                    List.drop 16 bytes
+
+                oauthState =
+                    Just <| bytesToString <| bytesFromInts stateBytes
+
+                codeVerifier =
+                    codeBytes
+                        |> bytesFromInts
+                        |> OAuth.codeVerifierFromBytes
+
+                maybeChallenge =
+                    Maybe.map OAuth.mkCodeChallenge codeVerifier
             in
-            state
+            { state
+                | oauthCodeVerifier = codeVerifier
+                , oauthState = oauthState
+            }
                 |> Cmd.Extra.withCmd
-                    ( authorization
-                        |> OAuth.makeAuthorizationUrl
-                        |> Url.toString
-                        |> Ports.openPopup
+                    ( maybeChallenge
+                        |> Maybe.map
+                            (\codeChallenge ->
+                                { clientId = state.oauthClientId
+                                , codeChallenge = codeChallenge
+                                , redirectUri = state.redirectUri
+                                , scope =
+                                    [ "https://www.googleapis.com/auth/youtube.readonly"
+                                    , "https://www.googleapis.com/auth/youtube"
+                                    ]
+                                , state = oauthState
+                                , url = { emptyUrl | host = "accounts.google.com", path = "/o/oauth2/v2/auth" }
+                                }
+                                    |> OAuth.makeAuthorizationUrl
+                                    |> Url.toString
+                                    |> Ports.openPopup
+                            )
+                        |> Maybe.withDefault Cmd.none
                     )
 
         ReceiveFromStorage { key, value } ->
@@ -214,6 +268,48 @@ update msg state =
                 }
                     |> Cmd.Extra.withNoCmd
 
+            else if key == "code" then
+                let
+                    decoder =
+                        Field.require "code" Decode.string <| \code ->
+                        Field.require "state" (Decode.maybe Decode.string) <| \state_ ->
+                        Decode.succeed
+                            { code = code
+                            , state = state_
+                            }
+                in
+                state
+                    |> Cmd.Extra.withCmd
+                        ( case (Decode.decodeValue decoder value, state.oauthCodeVerifier) of
+                            (Ok data, Just codeVerifier) ->
+                                if Maybe.Extra.isJust state.oauthState && state.oauthState == data.state then
+                                    let
+                                        _ = Debug.log "match" data
+                                    in
+                                    Cmd.batch
+                                        [ Ports.closePopup ()
+                                        , OAuth.makeTokenRequest
+                                            GetOAuthTokenResult
+                                            { credentials =
+                                                { clientId = state.oauthClientId
+                                                , secret = Nothing
+                                                }
+                                            , code = data.code
+                                            , codeVerifier = codeVerifier
+                                            , redirectUri = state.redirectUri
+                                            , url = { emptyUrl | host = "oauth2.googleapis.com", path = "/token" }
+                                            }
+                                            |> Debug.log "request"
+                                            |> Http.request
+                                        , Ports.removeFromStorage "code"
+                                        ]
+                                else
+                                    Cmd.none
+
+                            _ ->
+                                Cmd.none
+                        )
+
             else
                 Cmd.Extra.withNoCmd state
 
@@ -232,6 +328,12 @@ update msg state =
 
             else
                 Cmd.Extra.withNoCmd state
+
+        GetOAuthTokenResult result ->
+            let
+                _ = Debug.log "result" result
+            in
+            Cmd.Extra.withNoCmd state
 
         SetTime time ->
             let
@@ -706,9 +808,14 @@ playVideo state =
                 |> Cmd.Extra.withNoCmd
 
 
-convertBytes : List Int -> String
-convertBytes =
-    List.map Bytes.unsignedInt8 >> Bytes.sequence >> Bytes.encode >> Base64.bytes >> Base64.encode
+bytesFromInts : List Int -> Bytes
+bytesFromInts =
+    List.map Bytes.unsignedInt8 >> Bytes.sequence >> Bytes.encode
+
+
+bytesToString : Bytes -> String
+bytesToString =
+    Base64.bytes >> Base64.encode
 
 
 emptyUrl : Url

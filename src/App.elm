@@ -10,6 +10,7 @@ module App exposing
 import Browser.Navigation as Navigation
 import Dict exposing (Dict)
 import OAuth
+import OAuth.AuthorizationCode.PKCE as OAuth
 import Json.Encode as Encode
 import Url exposing (Url)
 
@@ -19,6 +20,7 @@ import Youtube.Video exposing (Video)
 
 type alias Flags =
     { bytes : List Int
+    , oauthClientId : String
     , playlistInStorage : Bool
     , playlistStorageKey : String
     , time : Int
@@ -39,6 +41,9 @@ type alias State =
     , playlistInStorage : Bool
     , playlistStorageKey : String
     , tokenStorageKey : String
+    , oauthClientId : String
+    , oauthCodeVerifier : Maybe OAuth.CodeVerifier
+    , oauthState : Maybe String
     }
 
 

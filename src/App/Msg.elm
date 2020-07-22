@@ -2,6 +2,7 @@ module App.Msg exposing (Msg(..))
 
 import Http
 import Json.Encode as Encode
+import OAuth.AuthorizationCode.PKCE as OAuth
 import Time
 
 import App
@@ -47,3 +48,4 @@ type Msg
     | SaveVideoTimes Int
     | ValidateVideoStartAt Int
     | ValidateVideoEndAt Int
+    | GetOAuthTokenResult (Result Http.Error OAuth.AuthenticationSuccess)
