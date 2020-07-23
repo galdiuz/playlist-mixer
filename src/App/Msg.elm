@@ -24,19 +24,13 @@ type Msg
     | ReceiveRandomBytes (List Int)
     | GetUserPlaylists
     | GetUserPlaylistsResult Int (List Playlist) (Result Http.Error (Page Playlist))
-    | GetPlaylistVideos (Result String (List Video) -> Msg) Playlist
+    | GetPlaylistVideos (List Playlist)
     | GetPlaylistVideosResult
-        (Result String (List Video) -> Msg)
-        Playlist
-        Int
-        (List Video)
-        (Result Http.Error (Page Video))
-    | GetAllVideos (List Playlist)
-    | GetAllVideosResult
-        (List Video)
+        (List App.VideoListItem)
         (List Playlist)
         Playlist
-        (Result String (List Video))
+        Int
+        (Result Http.Error (Page Video))
     | SetListChecked String Bool
     | SetListAll
     | SetListNone
@@ -44,8 +38,13 @@ type Msg
     | ToggleEditVideo Int Bool
     | SetVideoStartAt Int String
     | SetVideoEndAt Int String
+    | SetVideoNote Int String
     | SaveVideoTimes Int
+    | SaveVideoTimesResult Int (Result Http.Error Video)
     | ValidateVideoStartAt Int
     | ValidateVideoEndAt Int
     | PlayVideo Int
-    | SetPlaylist (List Video)
+    | SetPlaylist (List App.VideoListItem)
+    | ScrollToCurrentVideo
+    | PlayNext
+    | PlayPrevious

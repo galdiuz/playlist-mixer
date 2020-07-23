@@ -2,6 +2,7 @@ module Youtube.Video exposing
     ( Video
     , decoder
     , encode
+    , url
     )
 
 import Json.Decode as Decode
@@ -56,3 +57,8 @@ encode video =
         , ( "itemId", Encode.string video.itemId )
         , ( "note", Encode.maybe Encode.string video.note )
         ]
+
+
+url : Video -> String
+url video =
+    "https://www.youtube.com/watch?v=" ++ video.id

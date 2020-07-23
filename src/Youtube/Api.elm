@@ -1,4 +1,8 @@
-module Youtube.Api exposing (..)
+module Youtube.Api exposing
+    ( getUserPlaylists
+    , getPlaylistVideos
+    , updatePlaylistVideo
+    )
 
 import Http
 import Json.Decode as Decode
@@ -74,7 +78,7 @@ getUserPlaylists :
 getUserPlaylists oauthToken pageToken toMsg =
     get
         { url = userPlaylistsUrl pageToken
-        , expect = Http.expectJson toMsg (Youtube.Page.decoder Youtube.Playlist.decoder)
+        , expect = Http.expectJson toMsg (Youtube.Page.decoder playlistDecoder)
         , token = oauthToken
         }
 
@@ -115,6 +119,16 @@ userPlaylistsUrl pageToken =
         , Url.Builder.string "mine" "true"
         , Url.Builder.string "pageToken" <| Maybe.withDefault "" pageToken
         ]
+
+
+playlistDecoder : Decode.Decoder Playlist
+playlistDecoder =
+    Field.require "id" Decode.string <| \id ->
+    Field.requireAt [ "snippet", "title" ] Decode.string <| \title ->
+    Decode.succeed
+        { id = id
+        , title = title
+        }
 
 
 playlistItemDecoder : Decode.Decoder Video

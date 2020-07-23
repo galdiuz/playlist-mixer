@@ -5,13 +5,19 @@ import Element as El exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Events as Events
+import Element.Font as Font
 import Element.Input as Input
 import Html exposing (Html)
 import Html.Attributes as HA
+import OAuth
+import OAuth.Implicit as OAuth
+import String.Format
 
 import App exposing (State)
 import App.Msg as Msg exposing (Msg)
 import Google
+import Youtube.Playlist as Playlist
+import Youtube.Video as Video
 
 
 render : State -> Html Msg
@@ -20,119 +26,341 @@ render state =
         [ El.width El.fill
         , El.height El.fill
         ]
-        <| El.column
-            [ El.width El.fill
-            , El.height El.fill
+        <| case state.oauthResult of
+            OAuth.Empty ->
+                El.column
+                    [ Background.color state.theme.bg
+                    , El.width <| El.maximum 800 El.fill
+                    , El.height El.fill
+                    , El.centerX
+                    , Font.color state.theme.fg
+                    , El.spacing 30
+                    ]
+                    [ renderHeader state
+                    , if not <| Dict.isEmpty state.videos then
+                        renderPlayer state
+                      else
+                        El.none
+                    , if not <| Dict.isEmpty state.videos then
+                        renderVideoList state
+                      else
+                        El.none
+                    , renderMenu state
+                    , renderPlaylistList state
+                    , El.column
+                        [ El.padding 10
+                        , El.scrollbarY
+                        , El.height <| El.minimum 200 <| El.shrink
+                        ]
+                        <| List.map El.text state.messages
+                    ]
+
+            OAuth.Success _ ->
+                El.paragraph
+                    [ El.paddingEach { paddingZero | top = 20 }
+                    , El.spacing 10
+                    , Font.center
+                    ]
+                    [ El.text "Successfully signed in. You can now close this window."
+                    ]
+
+            OAuth.Error err ->
+                El.paragraph
+                    [ El.spacing 10
+                    ]
+                    [ El.text "An error occured during sign in:"
+                    , El.text <| OAuth.errorCodeToString err.error
+                    , El.text <| Maybe.withDefault "" err.errorDescription
+                    ]
+
+
+renderHeader : State -> Element Msg
+renderHeader state =
+    El.column
+        [ El.width El.fill
+        ]
+        [ El.el
+            [ El.paddingEach { paddingZero | top = 30, bottom = 10 }
+            , Font.size 32
+            , Font.bold
             ]
-            [ case state.token of
-                Just _ ->
-                    El.text "<Logged in>"
-                Nothing ->
-                    El.text "<Not logged in>"
-            , El.el
-                [ El.htmlAttribute <| HA.id playerId
-                , El.width <| El.maximum 640 <| El.fill
-                , El.height El.shrink
+            <| El.text "YouTube Playlist"
+        , renderSpacer state
+        ]
+
+
+renderSpacer : State -> Element msg
+renderSpacer state =
+    El.el
+        [ El.width El.fill
+        , El.height <| El.px 1
+        , Background.color <| El.rgb 0.5 0.5 0.5
+        ]
+        El.none
+
+
+renderMenu : State -> Element Msg
+renderMenu state =
+    El.column
+        [ El.spacing 30
+        ]
+        [ if state.playlistInStorage then
+            El.column
+                [ El.spacing 10
                 ]
-                El.none
-            , if state.playlistInStorage then
-                Input.button
-                    []
+                [ El.el
+                    [ Font.size 24
+                    ]
+                    <| El.text "Resume from previous list"
+                , Input.button
+                    buttonStyle
                     { onPress = Just <| Msg.LoadListFromStorage
-                    , label = El.text "Resume previous playlist"
+                    , label = El.text "Resume"
                     }
-              else
-                El.none
-            , Input.button
-                []
-                { onPress = Just Msg.SignIn
-                , label = El.text "Sign in"
-                }
+                ]
+          else
+            El.none
+        -- , El.column
+        --     [ El.spacing 10
+        --     ]
+        --     [ El.el
+        --         [ Font.size 24
+        --         ]
+        --         <| El.text "Load playlists by URL"
+        --     , Input.multiline
+        --         []
+        --         { label = Input.labelHidden ""
+        --         , onChange = \_ -> Msg.NoOp
+        --         , placeholder =
+        --             Input.placeholder
+        --                 []
+        --                 (El.text "https://www.youtube.com/playlist?list=aaabbbccc")
+        --                 |> Just
+        --         , spellcheck = False
+        --         , text = ""
+        --         }
+        --     , Input.button
+        --         buttonStyle
+        --         { onPress = Nothing
+        --         , label = El.text "Load"
+        --         }
+        --     ]
+        -- , El.column
+        --     [ El.spacing 10
+        --     ]
+        --     [ El.el
+        --         [ Font.size 24
+        --         ]
+        --         <| El.text "Load by user ID"
+        --     , Input.text
+        --         []
+        --         { label = Input.labelHidden ""
+        --         , onChange = \_ -> Msg.NoOp
+        --         , placeholder = Nothing
+        --         , text = ""
+        --         }
+        --     , Input.button
+        --         buttonStyle
+        --         { onPress = Nothing
+        --         , label = El.text "Load"
+        --         }
+        --     ]
+        , El.column
+            [ El.spacing 10
+            ]
+            [ El.el
+                [ Font.size 24
+                ]
+                <| El.text "Load playlists from your YouTube account"
             , case state.token of
                 Just _ ->
-                    Input.button
-                        []
-                        { onPress = Just <| Msg.GetUserPlaylists
-                        , label = El.text "Get list"
-                        }
+                    El.column
+                        [ El.spacing 10
+                        ]
+                        [ El.text <| "Signed in."
+                        , Input.button
+                            buttonStyle
+                            { onPress = Just <| Msg.GetUserPlaylists
+                            , label = El.text "Load"
+                            }
+                        ]
+
                 Nothing ->
-                    El.none
-            , if not <| Dict.isEmpty state.videos then
-                renderVideoList state
-              else
-                El.none
-            , if not <| Dict.isEmpty state.lists then
-                renderPlaylistList state
-              else
-                El.none
-            , El.column
-                [ El.padding 10
-                , El.scrollbarY
-                ]
-                <| List.map El.text state.messages
+                    El.column
+                        [ El.spacing 10
+                        ]
+                        [ El.text "Not signed in."
+                        , Input.button
+                            buttonStyle
+                            { onPress = Just Msg.SignIn
+                            , label = El.text "Sign in"
+                            }
+                        ]
             ]
-
-
-renderPlaylistList state =
-    El.column
-        [ El.padding 5
         ]
-        [ El.row
+
+
+renderPlayer : State -> Element Msg
+renderPlayer state =
+    El.column
+        [ El.width El.fill
+        , El.spacing 10
+        ]
+        [ El.el
+            [ El.htmlAttribute <| HA.id playerId
+            , El.width <| El.maximum 640 <| El.fill
+            , El.height El.shrink
+            , El.centerX
+            ]
+            El.none
+
+        , case Dict.get state.current state.videos of
+            Just listItem ->
+                El.column
+                    []
+                    [ El.text "Currently playing:"
+                    , El.paragraph
+                        [ Font.size 28
+                        ]
+                        [ El.text listItem.video.title
+                        ]
+                    , case ( listItem.video.startAt, listItem.video.endAt ) of
+                        ( Just startAt, Just endAt ) ->
+                            "({{}} - {{}})"
+                                |> String.Format.value (App.secondsToString <| Just startAt)
+                                |> String.Format.value (App.secondsToString <| Just endAt)
+                                |> El.text
+
+                        ( Just startAt, Nothing ) ->
+                            "({{}} - End)"
+                                |> String.Format.value (App.secondsToString <| Just startAt)
+                                |> El.text
+
+                        ( Nothing, Just endAt ) ->
+                            "(0:00 - {{}})"
+                                |> String.Format.value (App.secondsToString <| Just endAt)
+                                |> El.text
+
+                        ( Nothing, Nothing ) ->
+                            El.none
+                    ]
+
+            Nothing ->
+                El.none
+
+        , case Dict.get (App.nextIndex state) state.videos of
+            Just listItem ->
+                El.column
+                    []
+                    [ El.text "Up next:"
+                    , El.paragraph
+                        [ Font.size 20
+                        ]
+                        [ El.text listItem.video.title
+                        ]
+                    ]
+
+            Nothing ->
+                El.none
+        , El.row
             [ El.spacing 5
             ]
             [ Input.button
                 buttonStyle
-                { onPress =
-                    state.lists
-                        |> Dict.values
-                        |> List.filterMap
-                            (\listItem ->
-                                if listItem.checked then
-                                    Just listItem.item
-                                else
-                                    Nothing
-                            )
-                        |> Msg.GetAllVideos
-                        |> Just
-                , label = El.text "Confirm"
+                { onPress = Just Msg.PlayPrevious
+                , label = El.text "Play previous"
                 }
             , Input.button
                 buttonStyle
-                { onPress = Just Msg.SetListAll
-                , label = El.text "Select all"
-                }
-            , Input.button
-                buttonStyle
-                { onPress = Just Msg.SetListNone
-                , label = El.text "Deselect all"
+                { onPress = Just Msg.PlayNext
+                , label = El.text "Play next"
                 }
             ]
-        , El.column
-            [ El.spacing 5
-            , El.padding 5
-            ]
-            <| List.map
-                (\list ->
-                    Input.checkbox
-                        []
-                        { onChange = Msg.SetListChecked list.item.id
-                        , icon = Input.defaultCheckbox
-                        , checked = list.checked
-                        , label = Input.labelRight [] <| El.text list.item.title
-                        }
-                )
-                (Dict.values state.lists)
         ]
 
 
+renderPlaylistList : State -> Element Msg
+renderPlaylistList state =
+    if Dict.isEmpty state.lists then
+        El.none
+    else
+        El.column
+            [ El.paddingXY 0 5
+            , El.spacing 10
+            , El.width El.fill
+            ]
+            [ El.row
+                [ El.spacing 5
+                ]
+                [ Input.button
+                    buttonStyle
+                    { onPress =
+                        state.lists
+                            |> Dict.values
+                            |> List.filterMap
+                                (\listItem ->
+                                    if listItem.checked then
+                                        Just listItem.playlist
+                                    else
+                                        Nothing
+                                )
+                            |> Msg.GetPlaylistVideos
+                            |> Just
+                    , label = El.text "Confirm"
+                    }
+                , Input.button
+                    buttonStyle
+                    { onPress = Just Msg.SetListAll
+                    , label = El.text "Select all"
+                    }
+                , Input.button
+                    buttonStyle
+                    { onPress = Just Msg.SetListNone
+                    , label = El.text "Deselect all"
+                    }
+                ]
+            , El.column
+                [ El.spacing 5
+                , El.padding 5
+                , El.height <| El.maximum 400 <| El.shrink
+                , El.width El.fill
+                , El.scrollbarY
+                ]
+                <| List.map
+                    (\listItem ->
+                        El.row
+                            [ El.spacing 10
+                            ]
+                            [ Input.checkbox
+                                []
+                                { onChange = Msg.SetListChecked listItem.playlist.id
+                                , icon = Input.defaultCheckbox
+                                , checked = listItem.checked
+                                , label = Input.labelRight [] <| El.text listItem.playlist.title
+                                }
+                            , El.newTabLink
+                                buttonStyle
+                                { url = Playlist.url listItem.playlist
+                                , label = El.text "Open playlist"
+                                }
+                            ]
+                    )
+                    (Dict.values state.lists
+                        |> List.sortBy (.playlist >> .title)
+                    )
+            ]
+
+
+renderVideoList : State -> Element Msg
 renderVideoList state =
     El.column
         [ El.scrollbarY
         , El.height <| El.minimum 600 <| El.shrink
         , El.htmlAttribute <| HA.id playlistId
+        , El.width El.fill
         ]
         [ El.column
-            [ El.spacing 10
+            [ El.spacing 15
             , El.padding 5
             ]
             <| List.map
@@ -141,11 +369,17 @@ renderVideoList state =
                         [ El.spacing 5
                         , El.htmlAttribute <| HA.id <| playlistVideoId index
                         ]
-                        [ El.text <| String.fromInt (index + 1) ++ "."
+                        [ El.el
+                            [ El.alignTop ]
+                            <| El.text <| String.fromInt (index + 1) ++ "."
                         , El.column
                             [ El.width El.fill
+                            , El.spacing 5
                             ]
-                            [ El.paragraph [] [ El.text listItem.video.title ]
+                            [ El.paragraph
+                                []
+                                [ El.text listItem.video.title
+                                ]
                             , El.row
                                 [ El.spacing 10
                                 ]
@@ -159,10 +393,20 @@ renderVideoList state =
                                     { onPress = Just <| Msg.ToggleEditVideo index (not listItem.editOpen)
                                     , label = El.text "Edit"
                                     }
+                                , El.newTabLink
+                                    buttonStyle
+                                    { url = Video.url listItem.video
+                                    , label = El.text "Open Video"
+                                    }
+                                , El.newTabLink
+                                    buttonStyle
+                                    { url = Playlist.url listItem.playlist
+                                    , label = El.text "Open Playlist"
+                                    }
                                 ]
                             , if listItem.editOpen then
                                 if Google.tokenHasWriteScope state.token then
-                                    El.row
+                                    El.column
                                         [ El.spacing 10
                                         ]
                                         [ renderTimeInput
@@ -172,6 +416,7 @@ renderVideoList state =
                                             , onLoseFocus = Msg.ValidateVideoStartAt index
                                             , value = listItem.startAt
                                             }
+                                            state
                                         , renderTimeInput
                                             { error = listItem.endAtError
                                             , label = "End:"
@@ -179,22 +424,35 @@ renderVideoList state =
                                             , onLoseFocus = Msg.ValidateVideoEndAt index
                                             , value = listItem.endAt
                                             }
-                                        , Input.button
-                                            buttonStyle
-                                            { onPress = Just <| Msg.SaveVideoTimes index
-                                            , label = El.text "Save"
+                                            state
+                                        , Input.multiline
+                                            []
+                                            { label = Input.labelLeft [] <| El.text "Note:"
+                                            , onChange = Msg.SetVideoNote index
+                                            , placeholder = Nothing
+                                            , spellcheck = False
+                                            , text = listItem.note
                                             }
-                                        , Input.button
-                                            buttonStyle
-                                            { onPress = Just <| Msg.ToggleEditVideo index False
-                                            , label = El.text "Cancel"
-                                            }
+                                        , El.row
+                                            [ El.spacing 10
+                                            ]
+                                            [ Input.button
+                                                buttonStyle
+                                                { onPress = Just <| Msg.SaveVideoTimes index
+                                                , label = El.text "Save"
+                                                }
+                                            , Input.button
+                                                buttonStyle
+                                                { onPress = Just <| Msg.ToggleEditVideo index False
+                                                , label = El.text "Cancel"
+                                                }
+                                            ]
                                         ]
                                 else
                                     El.row
                                         [ El.spacing 10
                                         ]
-                                        [ El.text "Not logged in / not authorized"
+                                        [ El.text "Not signed in / not authorized"
                                         , Input.button
                                                 buttonStyle
                                                 { onPress = Just Msg.SignIn
@@ -217,15 +475,16 @@ renderTimeInput :
     , onLoseFocus : msg
     , value : String
     }
+    -> State
     -> Element msg
-renderTimeInput data =
+renderTimeInput data state =
     Input.text
         [ El.width <| El.px 75
         , El.below
             ( case data.error of
                 Just error ->
                     El.el
-                        [ Background.color <| El.rgb 1 1 1
+                        [ Background.color state.theme.bg
                         , Border.color <| El.rgb 1 0 0
                         , Border.width 1
                         , Border.rounded 5
@@ -237,6 +496,7 @@ renderTimeInput data =
                     El.none
             )
         , Events.onLoseFocus data.onLoseFocus
+        , Font.color <| El.rgb 0 0 0
         , maybeAttribute data.error <| Border.color <| El.rgb 1 0 0
         ]
         { label = Input.labelLeft [] <| El.text data.label
@@ -262,6 +522,15 @@ buttonStyle =
     , Border.width 1
     , Border.rounded 5
     ]
+
+
+paddingZero : { top : Int, bottom : Int, left : Int, right : Int }
+paddingZero =
+    { top = 0
+    , bottom = 0
+    , left = 0
+    , right = 0
+    }
 
 
 playerId : String

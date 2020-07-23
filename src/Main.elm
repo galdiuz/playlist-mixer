@@ -25,13 +25,13 @@ import Url exposing (Url)
 
 import App exposing (Flags, State)
 import App.Msg as Msg exposing (Msg(..))
-import App.Json
 import App.UI
 import App.Ports as Ports
 import Google
 import Youtube.Api
 import Youtube.PlayerError as PlayerError
 import Youtube.PlayerState as PlayerState
+import Youtube.Playlist as Playlist exposing (Playlist)
 import Youtube.Video as Video exposing (Video)
 
 
@@ -50,8 +50,46 @@ main =
 init : Flags -> Url -> Navigation.Key -> ( State, Cmd Msg )
 init flags url navigationKey =
     let
+        oauthResult =
+            OAuth.parseToken url
+
+        token =
+            getToken flags oauthResult
+    in
+    { navigationKey = navigationKey
+    , redirectUri = { url | query = Nothing, fragment = Nothing }
+    , time = flags.time
+    , token = token
+    , lists = Dict.empty
+    , messages = []
+    , videos = Dict.empty
+    , current = 0
+    , playlistInStorage = flags.playlistInStorage
+    , playlistStorageKey = flags.playlistStorageKey
+    , tokenStorageKey = flags.tokenStorageKey
+    , oauthClientId = flags.oauthClientId
+    , youtubeApiReady = False
+    , theme = App.defaultTheme
+    , oauthResult = oauthResult
+    }
+        |> Cmd.Extra.withCmd
+            ( case token of
+                Just t ->
+                    Ports.saveToStorage
+                        { key = flags.tokenStorageKey
+                        , value = App.encodeToken t
+                        }
+
+                Nothing ->
+                    Ports.removeFromStorage flags.tokenStorageKey
+            )
+
+
+getToken : Flags -> OAuth.AuthorizationResult -> Maybe App.Token
+getToken flags oauthResult =
+    let
         urlToken =
-            case OAuth.parseToken url of
+            case oauthResult of
                 OAuth.Empty ->
                     Nothing
 
@@ -74,37 +112,12 @@ init flags url navigationKey =
                     Nothing
 
         flagsToken =
-            Decode.decodeValue App.Json.decodeToken flags.token
+            flags.token
+                |> Decode.decodeValue App.decodeToken
                 |> Result.toMaybe
                 |> Maybe.Extra.filter (\t -> t.expires > flags.time)
-
-        token =
-            Maybe.Extra.or urlToken flagsToken
     in
-    { navigationKey = navigationKey
-    , redirectUri = { url | query = Nothing, fragment = Nothing }
-    , time = flags.time
-    , token = token
-    , lists = Dict.empty
-    , messages = []
-    , videos = Dict.empty
-    , current = 0
-    , playlistInStorage = flags.playlistInStorage
-    , playlistStorageKey = flags.playlistStorageKey
-    , tokenStorageKey = flags.tokenStorageKey
-    , oauthClientId = flags.oauthClientId
-    , youtubeApiReady = False
-    }
-        |> Cmd.Extra.withCmd
-            ( case token of
-                Just t ->
-                    Ports.saveToStorage
-                        { key = flags.tokenStorageKey
-                        , value = App.Json.encodeToken t
-                        }
-                Nothing ->
-                    Ports.removeFromStorage flags.tokenStorageKey
-            )
+    Maybe.Extra.or urlToken flagsToken
 
 
 view : State -> Browser.Document Msg
@@ -133,7 +146,7 @@ update : Msg -> State -> ( State, Cmd Msg )
 update msg state =
     case msg of
         NoOp ->
-            ( state, Cmd.none )
+            Cmd.Extra.withNoCmd state
 
         YouTubeApiReady ->
             { state
@@ -148,18 +161,11 @@ update msg state =
             let
                 decoder =
                     Decode.field "data" PlayerState.decoder
-                _ =
-                    Decode.decodeValue decoder data
-                        |> Debug.log "state"
             in
             case Decode.decodeValue decoder data of
                 Ok PlayerState.Ended ->
                     { state
-                        | current =
-                            if Dict.size state.videos > state.current + 1 then
-                                state.current + 1
-                            else
-                                0
+                        | current = App.nextIndex state
                     }
                         |> playCurrentVideo
                         |> Cmd.Extra.andThen scrollToCurrent
@@ -199,37 +205,37 @@ update msg state =
 
         ReceiveFromStorage { key, value } ->
             if key == state.playlistStorageKey then
-                case Decode.decodeValue App.Json.decodePlaylist value of
+                case Decode.decodeValue App.decodePlaylist value of
                     Ok playlist ->
                         { state
                             | current = playlist.current
                             , videos =
-                                playlist.videos
-                                    |> List.map App.videoToListItem
+                                playlist.items
                                     |> List.indexedMap Tuple.pair
                                     |> Dict.fromList
                         }
                             |> Cmd.Extra.withCmd (Ports.createPlayer App.UI.playerId)
-                            -- |> Cmd.Extra.andThen
-                            --     (\s ->
-                            --         Process.sleep 100
-                            --             |> Task.andThen (always <| Task.succeed NoOp)
-                            --             |> Task.perform identity
-                            --     )
-                            |> Cmd.Extra.andThen scrollToCurrent
+                            |> Cmd.Extra.addCmd
+                                ( Task.perform
+                                    (\_ -> ScrollToCurrentVideo)
+                                    (Process.sleep 10)
+                                )
 
-                    Err _ ->
+                    Err err ->
                         Cmd.Extra.withNoCmd state -- TODO: Message
 
             else
                 Cmd.Extra.withNoCmd state
+
+        ScrollToCurrentVideo ->
+            scrollToCurrent state
 
         StorageChanged { key, value } ->
             if key == state.tokenStorageKey then
                 { state
                     | token =
                         value
-                            |> Decode.decodeValue App.Json.decodeToken
+                            |> Decode.decodeValue App.decodeToken
                             |> Result.toMaybe
                             |> Maybe.Extra.filter (\t -> t.expires > state.time)
                 }
@@ -288,9 +294,11 @@ update msg state =
                             pageNo + 1
                     in
                     if Maybe.Extra.isJust page.nextPageToken then
-                        { state
-                            | messages = ("Fetching page " ++ (String.fromInt nextPage) ++ "...") :: state.messages
-                        }
+                        state
+                            |> appendMessage
+                                ("Fetching page {{}}..."
+                                    |> String.Format.value (String.fromInt nextPage)
+                                )
                             |> Cmd.Extra.withCmd
                                 ( Youtube.Api.getUserPlaylists
                                     state.token
@@ -300,122 +308,94 @@ update msg state =
 
                     else
                         { state
-                            | messages = ("Fetched " ++ (String.fromInt <| List.length playlists) ++ " playlists.") :: state.messages
-                            , lists =
+                            | lists =
                                 List.map
                                     (\list ->
                                         Tuple.pair
                                             list.id
                                             { checked = False
-                                            , item = list
+                                            , playlist = list
                                             }
                                     )
                                     playlists
                                     |> Dict.fromList
                         }
+                            |> appendMessage
+                                ("Fetched {{}} playlists."
+                                    |> String.Format.value (String.fromInt <| List.length playlists)
+                                )
                             |> Cmd.Extra.withNoCmd
 
                 Err err ->
-                    { state
-                        | messages = "Error when fetching playlists." :: state.messages
-                    }
+                    state
+                        |> appendMessage "Error when fetching playlists."
                         |> Cmd.Extra.withCmd (Ports.consoleErr <| httpErrorToString err)
 
-        GetPlaylistVideos andThen playlist ->
-            { state |
-                messages = ("Fetching page 1 of playlist '" ++ playlist.title ++ "'...") :: state.messages
-            }
-                |> Cmd.Extra.withCmd
-                    ( Youtube.Api.getPlaylistVideos
-                        playlist.id
-                        state.token
+        GetPlaylistVideos playlists ->
+            case playlists of
+                firstPlaylist :: remaining ->
+                    fetchPlaylistPage
+                        []
+                        remaining
+                        firstPlaylist
+                        1
                         Nothing
-                        ( GetPlaylistVideosResult andThen playlist 1 [] )
-                    )
+                        { state
+                            | lists = Dict.empty
+                        }
 
-        GetPlaylistVideosResult andThen playlist pageNo carry result ->
+                [] ->
+                    Cmd.Extra.withNoCmd state
+
+        GetPlaylistVideosResult videoListItems remainingPlaylists currentPlaylist currentPage result ->
             case result of
                 Ok page ->
                     let
-                        videos =
-                            List.append carry page.items
-
-                        nextPage =
-                            pageNo + 1
+                        newVideoListItems =
+                            page.items
+                                |> List.map (App.makeVideoListItem currentPlaylist)
+                                |> List.append videoListItems
                     in
-                    if Maybe.Extra.isJust page.nextPageToken then
-                        { state
-                            | messages = ("Fetching page " ++ (String.fromInt nextPage) ++ "...") :: state.messages
-                        }
-                            |> Cmd.Extra.withCmd
-                                ( Youtube.Api.getPlaylistVideos
-                                    playlist.id
-                                    state.token
-                                    page.nextPageToken
-                                    ( GetPlaylistVideosResult andThen playlist nextPage videos )
-                                )
-
-                    else
-                        update
-                            (andThen <| Ok videos)
-                            { state
-                                | messages = ("Fetched " ++ (String.fromInt <| List.length videos) ++ " videos.") :: state.messages
-                            }
-
-                Err err ->
-                    update
-                        (andThen <| Err <| httpErrorToString err)
-                        state
-
-        GetAllVideos playlists ->
-            case playlists of
-                firstPlaylist :: rem ->
-                    update
-                        ( GetPlaylistVideos
-                            ( GetAllVideosResult [] rem firstPlaylist )
-                            firstPlaylist
-                        )
-                        state
-
-                [] ->
-                    state
-                        |> Cmd.Extra.withNoCmd
-
-        GetAllVideosResult carry remainingPlaylists currentPlaylist result ->
-            case result of
-                Ok videoList ->
-                    let
-                        videos =
-                            List.append carry videoList
-                    in
-                    case remainingPlaylists of
-                        nextPlaylist :: rem ->
-                            update
-                                ( GetPlaylistVideos
-                                    ( GetAllVideosResult videos rem nextPlaylist )
-                                    nextPlaylist
-                                )
+                    case ( page.nextPageToken, remainingPlaylists) of
+                        ( Just nextPageToken, _ ) ->
+                            fetchPlaylistPage
+                                newVideoListItems
+                                remainingPlaylists
+                                currentPlaylist
+                                (currentPage + 1)
+                                page.nextPageToken
                                 state
 
-                        [] ->
+                        ( Nothing, nextPlaylist :: nextRemaining ) ->
+                            fetchPlaylistPage
+                                newVideoListItems
+                                nextRemaining
+                                nextPlaylist
+                                1
+                                Nothing
+                                state
+
+                        ( Nothing, [] ) ->
                             state
+                                |> appendMessage
+                                    ("Fetched {{}} videos."
+                                        |> String.Format.value (String.fromInt <| List.length newVideoListItems)
+                                    )
                                 |> Cmd.Extra.withCmd
-                                    ( videos
+                                    (newVideoListItems
                                         |> Random.List.shuffle
                                         |> Random.generate SetPlaylist
                                     )
 
                 Err err ->
-                    { state
-                        | messages = "Error when fetching videos." :: state.messages
-                    }
-                        |> Cmd.Extra.withCmd (Ports.consoleErr err)
+                    state
+                        |> appendMessage "Error when fetching videos."
+                        |> Cmd.Extra.withCmd (Ports.consoleErr <| httpErrorToString err)
 
         SetPlaylist videos ->
             { state
                 | videos =
                     videos
-                        |> List.map App.videoToListItem
                         |> List.indexedMap Tuple.pair
                         |> Dict.fromList
                 , lists = Dict.empty
@@ -475,10 +455,11 @@ update msg state =
                             (\listItem ->
                                 { listItem
                                     | editOpen = bool
-                                    , startAt = secondsToString listItem.video.startAt
+                                    , startAt = App.secondsToString listItem.video.startAt
                                     , startAtError = Nothing
-                                    , endAt = secondsToString listItem.video.endAt
+                                    , endAt = App.secondsToString listItem.video.endAt
                                     , endAtError = Nothing
+                                    , note = Maybe.withDefault "" listItem.video.note
                                 }
                             )
                         )
@@ -491,7 +472,7 @@ update msg state =
                 | videos =
                     Dict.update
                         index
-                        ( Maybe.map
+                        (Maybe.map
                             (\listItem ->
                                 { listItem
                                     | startAt = string
@@ -507,10 +488,26 @@ update msg state =
                 | videos =
                     Dict.update
                         index
-                        ( Maybe.map
+                        (Maybe.map
                             (\listItem ->
                                 { listItem
                                     | endAt = string
+                                }
+                            )
+                        )
+                        state.videos
+            }
+                |> Cmd.Extra.withNoCmd
+
+        SetVideoNote index string ->
+            { state
+                | videos =
+                    Dict.update
+                        index
+                        (Maybe.map
+                            (\listItem ->
+                                { listItem
+                                    | note = string
                                 }
                             )
                         )
@@ -534,41 +531,63 @@ update msg state =
                                                 { video
                                                     | startAt = startAt
                                                     , endAt = endAt
+                                                    , note =
+                                                        if String.isEmpty listItem.note then
+                                                            Nothing
+                                                        else
+                                                            Just listItem.note
                                                 }
                                                 state.token
-                                                (Debug.log "result" >> always Msg.NoOp)
+                                                (SaveVideoTimesResult index)
                                             )
 
                                 Err error ->
-                                    -- TODO
-                                    state
+                                    state -- TODO
                                         |> Cmd.Extra.withNoCmd
 
                         (Err error, _) ->
-                            -- TODO
-                            state
+                            state -- TODO
                                 |> Cmd.Extra.withNoCmd
 
                         (_, Err error) ->
-                            -- TODO
-                            state
+                            state -- TODO
                                 |> Cmd.Extra.withNoCmd
 
                 Nothing ->
-                    state
-                        |> Cmd.Extra.withNoCmd
+                    Cmd.Extra.withNoCmd state
+
+        SaveVideoTimesResult index result ->
+            case result of
+                Ok video ->
+                    { state
+                        | videos =
+                            Dict.update
+                                index
+                                ( Maybe.map
+                                    (\listItem ->
+                                        { listItem
+                                            | video = video
+                                        }
+                                    )
+                                )
+                                state.videos
+                    }
+                        |> saveListToStorage
+
+                Err err ->
+                    Cmd.Extra.withNoCmd state -- TODO
 
         ValidateVideoStartAt index ->
             case Dict.get index state.videos of
                 Just listItem ->
                     let
-                        (startAt, startAtError) =
+                        ( startAt, startAtError ) =
                             case parseTime listItem.startAt of
                                 Ok seconds ->
-                                    (secondsToString seconds, Nothing)
+                                    ( App.secondsToString seconds, Nothing )
 
                                 Err error ->
-                                    (listItem.startAt, Just error)
+                                    ( listItem.startAt, Just error )
                     in
                     { state
                         | videos =
@@ -594,13 +613,13 @@ update msg state =
             case Dict.get index state.videos of
                 Just listItem ->
                     let
-                        (endAt, endAtError) =
+                        ( endAt, endAtError ) =
                             case parseTime listItem.endAt of
                                 Ok seconds ->
-                                    (secondsToString seconds, Nothing)
+                                    ( App.secondsToString seconds, Nothing )
 
                                 Err error ->
-                                    (listItem.endAt, Just error)
+                                    ( listItem.endAt, Just error )
                     in
                     { state
                         | videos =
@@ -634,6 +653,53 @@ update msg state =
                 Nothing ->
                     state
                         |> Cmd.Extra.withNoCmd
+
+        PlayNext ->
+            { state
+                | current = App.nextIndex state
+            }
+                |> playCurrentVideo
+                |> Cmd.Extra.andThen saveListToStorage
+                |> Cmd.Extra.andThen scrollToCurrent
+
+        PlayPrevious ->
+            { state
+                | current = App.previousIndex state
+            }
+                |> playCurrentVideo
+                |> Cmd.Extra.andThen saveListToStorage
+                |> Cmd.Extra.andThen scrollToCurrent
+
+
+appendMessage : String -> State -> State
+appendMessage message state =
+    { state
+        | messages = message :: state.messages
+    }
+
+
+fetchPlaylistPage :
+    List App.VideoListItem
+    -> List Playlist
+    -> Playlist
+    -> Int
+    -> Maybe String
+    -> State
+    -> ( State, Cmd Msg )
+fetchPlaylistPage videoListItems remainingPlaylists playlist page pageToken state =
+    state
+        |> appendMessage
+            ("Fetching page {{}} of playlist '{{}}'..."
+                |> String.Format.value (String.fromInt page)
+                |> String.Format.value playlist.title
+            )
+        |> Cmd.Extra.withCmd
+            (Youtube.Api.getPlaylistVideos
+                playlist.id
+                state.token
+                pageToken
+                (GetPlaylistVideosResult videoListItems remainingPlaylists playlist page)
+            )
 
 
 checkTokenExpiration : State -> ( State, Cmd msg )
@@ -712,31 +778,15 @@ validateTimes maybeStartAt maybeEndAt =
             Ok ()
 
 
-secondsToString : Maybe Int -> String
-secondsToString maybe =
-    case maybe of
-        Just seconds ->
-            "{{ }}:{{}}"
-                |> String.Format.value (String.fromInt <| seconds // 60)
-                |> String.Format.value (String.padLeft 2 '0' <| String.fromInt <| remainderBy 60 seconds)
-
-        Nothing ->
-            ""
-
-
 saveListToStorage : State -> ( State, Cmd msg )
 saveListToStorage state =
-    let
-        videos =
-            state.videos
-                |> Dict.values
-                |> List.map .video
-    in
-    state
+    { state
+        | playlistInStorage = True
+    }
         |> Cmd.Extra.withCmd
             ( Ports.saveToStorage
                 { key = state.playlistStorageKey
-                , value = App.Json.encodePlaylist state.current videos
+                , value = App.encodePlaylist state.current <| Dict.values state.videos
                 }
             )
 
@@ -753,7 +803,7 @@ scrollToCurrent state =
                 (Browser.Dom.getElement App.UI.playlistId)
                 (Browser.Dom.getViewportOf App.UI.playlistId)
                 |> Task.andThen (\y -> Browser.Dom.setViewportOf App.UI.playlistId 0 y)
-                |> Task.attempt (always NoOp)
+                |> Task.attempt (\_ -> NoOp)
             )
 
 
