@@ -9,6 +9,7 @@ import Element.Font as Font
 import Element.Input as Input
 import Html exposing (Html)
 import Html.Attributes as HA
+import Maybe.Extra
 import OAuth
 import OAuth.Implicit as OAuth
 import String.Format
@@ -53,6 +54,7 @@ render state =
                         , El.height <| El.minimum 200 <| El.shrink
                         ]
                         <| List.map El.text state.messages
+                    , renderFooter state
                     ]
 
             OAuth.Success _ ->
@@ -86,6 +88,25 @@ renderHeader state =
             ]
             <| El.text "YouTube Playlist"
         , renderSpacer state
+        ]
+
+
+renderFooter : State -> Element Msg
+renderFooter state =
+    El.column
+        [ El.width El.fill
+        ]
+        [ renderSpacer state
+        , El.newTabLink
+            []
+            { label = El.text "Privacy policy"
+            , url = "/privacy-policy.html"
+            }
+        , El.newTabLink
+            []
+            { label = El.text "View source on GitHub"
+            , url = "https://github.com/galdiuz/youtube-playlist"
+            }
         ]
 
 
@@ -508,12 +529,10 @@ renderTimeInput data state =
 
 maybeAttribute : Maybe a -> El.Attribute msg -> El.Attribute msg
 maybeAttribute maybe attr =
-    case maybe of
-        Just _ ->
-            attr
-
-        Nothing ->
-            El.focused []
+    if Maybe.Extra.isJust maybe then
+        attr
+    else
+        El.focused []
 
 
 buttonStyle : List (El.Attribute msg)
