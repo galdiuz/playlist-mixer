@@ -956,13 +956,13 @@ scrollToCurrent state =
 playCurrentVideo : State -> ( State, Cmd msg )
 playCurrentVideo state =
     case Dict.get state.current state.videos of
-        Just video ->
+        Just listItem ->
             state
                 |> Cmd.Extra.withCmd
                     ( Ports.playVideo
-                        { videoId = video.video.id
-                        , startSeconds = Maybe.withDefault -1 video.video.startAt
-                        , endSeconds = Maybe.withDefault -1 video.video.endAt
+                        { videoId = listItem.video.id
+                        , startSeconds = listItem.video.startAt
+                        , endSeconds = listItem.video.endAt
                         }
                     )
 

@@ -76,8 +76,8 @@ type alias Token =
 
 type alias PlayVideoData =
     { videoId : String
-    , startSeconds : Int
-    , endSeconds : Int
+    , startSeconds : Maybe Int
+    , endSeconds : Maybe Int
     }
 
 
