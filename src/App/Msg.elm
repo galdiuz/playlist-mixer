@@ -49,13 +49,15 @@ type PlaylistListMsg
         Playlist
         Int
         (Result Http.Error (Page Video))
+    | GetPlaylistsResult Int (List Playlist) (Result Http.Error (Page Playlist))
     | GetUserPlaylists
-    | GetUserPlaylistsResult Int (List Playlist) (Result Http.Error (Page Playlist))
     | LoadListFromStorage
+    | LoadPlaylistsByUrl
     | SetChecked String Bool
     | SetCheckedAll
     | SetCheckedNone
     | SetPlaylist (List App.VideoListItem)
+    | SetPlaylistsByUrl String
 
 
 type StorageMsg

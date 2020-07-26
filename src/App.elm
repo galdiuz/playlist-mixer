@@ -50,21 +50,13 @@ type alias State =
     , youtubeApiReady : Bool
     , theme : Theme
     , oauthResult : OAuth.AuthorizationResult
+    , playlistsByUrl : String
     }
 
 
 type alias Theme =
     { bg : Element.Color
     , fg : Element.Color
-    }
-
-
-defaultTheme : Theme
-defaultTheme =
-    { bg = Element.rgb 1 1 1
-    , fg = Element.rgb 0 0 0
-    -- { bg = Element.rgb 0.1 0.1 0.1
-    -- , fg = Element.rgb 0.8 0.8 0.8
     }
 
 
@@ -103,6 +95,15 @@ type alias VideoListItem =
     , endAtError : Maybe String
     , note : String
     , editOpen : Bool
+    }
+
+
+defaultTheme : Theme
+defaultTheme =
+    { bg = Element.rgb 1 1 1
+    , fg = Element.rgb 0 0 0
+    -- { bg = Element.rgb 0.1 0.1 0.1
+    -- , fg = Element.rgb 0.8 0.8 0.8
     }
 
 

@@ -22,6 +22,8 @@ import Task
 import Time
 import Tuple2
 import Url exposing (Url)
+import Url.Parser
+import Url.Parser.Query
 
 import App exposing (Flags, State)
 import App.Msg as Msg exposing (Msg)
@@ -71,6 +73,7 @@ init flags url navigationKey =
     , youtubeApiReady = False
     , theme = App.defaultTheme
     , oauthResult = oauthResult
+    , playlistsByUrl = ""
     }
         |> Cmd.Extra.withCmd
             ( case token of
@@ -313,18 +316,7 @@ updatePlaylistList msg state =
                         |> appendMessage "Error when fetching videos."
                         |> Cmd.Extra.withCmd (Ports.consoleErr <| httpErrorToString err)
 
-        Msg.GetUserPlaylists ->
-            { state |
-                messages = "Fetching page 1 of user's playlists..." :: state.messages
-            }
-                |> Cmd.Extra.withCmd
-                    (Youtube.Api.getUserPlaylists
-                        state.token
-                        Nothing
-                        (Msg.PlaylistList << Msg.GetUserPlaylistsResult 1 [])
-                    )
-
-        Msg.GetUserPlaylistsResult pageNo carry result ->
+        Msg.GetPlaylistsResult pageNo carry result ->
             case result of
                 Ok page ->
                     let
@@ -333,6 +325,12 @@ updatePlaylistList msg state =
 
                         nextPage =
                             pageNo + 1
+
+                        playlistIds =
+                            state.lists
+                                |> Dict.values
+                                |> List.map .playlist
+                                |> List.map .id
                     in
                     if Maybe.Extra.isJust page.nextPageToken then
                         state
@@ -344,22 +342,23 @@ updatePlaylistList msg state =
                                 (Youtube.Api.getUserPlaylists
                                     state.token
                                     page.nextPageToken
-                                    (Msg.PlaylistList << Msg.GetUserPlaylistsResult nextPage playlists)
+                                    (Msg.PlaylistList << Msg.GetPlaylistsResult nextPage playlists)
                                 )
 
                     else
                         { state
                             | lists =
-                                List.map
-                                    (\list ->
-                                        Tuple.pair
-                                            list.id
-                                            { checked = False
-                                            , playlist = list
-                                            }
-                                    )
-                                    playlists
+                                playlists
+                                    |> List.map
+                                        (\playlist ->
+                                            Tuple.pair
+                                                playlist.id
+                                                { checked = False
+                                                , playlist = playlist
+                                                }
+                                        )
                                     |> Dict.fromList
+                                    |> Dict.union state.lists
                         }
                             |> appendMessage
                                 ("Fetched {{}} playlists."
@@ -372,9 +371,53 @@ updatePlaylistList msg state =
                         |> appendMessage "Error when fetching playlists."
                         |> Cmd.Extra.withCmd (Ports.consoleErr <| httpErrorToString err)
 
+        Msg.GetUserPlaylists ->
+            { state |
+                messages = "Fetching page 1 of user's playlists..." :: state.messages
+            }
+                |> Cmd.Extra.withCmd
+                    (Youtube.Api.getUserPlaylists
+                        state.token
+                        Nothing
+                        (Msg.PlaylistList << Msg.GetPlaylistsResult 1 [])
+                    )
+
         Msg.LoadListFromStorage ->
             state
                 |> Cmd.Extra.withCmd (Ports.loadFromStorage state.playlistStorageKey)
+
+        Msg.LoadPlaylistsByUrl ->
+            let
+                playlistIds =
+                    state.playlistsByUrl
+                        |> String.words
+                        |> List.map
+                            (\string ->
+                                string
+                                    |> Url.fromString
+                                    |> Debug.log "url"
+                                    |> Maybe.andThen
+                                        (\url ->
+                                            Url.Parser.parse
+                                                (Url.Parser.query <| Url.Parser.Query.string "list")
+                                                { url | path = "" }
+                                        )
+                                    |> Debug.log "parsed"
+                                    |> Maybe.Extra.join
+                                    |> Maybe.withDefault string
+
+                            )
+            in
+            { state |
+                messages = "Fetching page 1 of entered playlists..." :: state.messages
+            }
+                |> Cmd.Extra.withCmd
+                    (Youtube.Api.getPlaylistsByIds
+                        playlistIds
+                        state.token
+                        Nothing
+                        (Msg.PlaylistList << Msg.GetPlaylistsResult 1 [])
+                    )
 
         Msg.SetChecked key checked ->
             { state
@@ -425,6 +468,12 @@ updatePlaylistList msg state =
             }
                 |> saveListToStorage
                 |> Cmd.Extra.addCmd (Ports.createPlayer App.UI.playerId)
+
+        Msg.SetPlaylistsByUrl string ->
+            { state
+                | playlistsByUrl = string
+            }
+                |> Cmd.Extra.withNoCmd
 
 
 updateStorage : Msg.StorageMsg -> State -> ( State, Cmd Msg )
