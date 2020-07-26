@@ -76,7 +76,7 @@ render state =
                     ]
 
 
-renderHeader : State -> Element Msg
+renderHeader : State -> Element msg
 renderHeader state =
     El.column
         [ El.width El.fill
@@ -91,7 +91,7 @@ renderHeader state =
         ]
 
 
-renderFooter : State -> Element Msg
+renderFooter : State -> Element msg
 renderFooter state =
     El.column
         [ El.width El.fill
@@ -135,7 +135,7 @@ renderMenu state =
                     <| El.text "Resume from previous list"
                 , Input.button
                     buttonStyle
-                    { onPress = Just <| Msg.LoadListFromStorage
+                    { onPress = Just <| Msg.PlaylistList <| Msg.LoadListFromStorage
                     , label = El.text "Resume"
                     }
                 ]
@@ -201,7 +201,7 @@ renderMenu state =
                         [ El.text <| "Signed in."
                         , Input.button
                             buttonStyle
-                            { onPress = Just <| Msg.GetUserPlaylists
+                            { onPress = Just <| Msg.PlaylistList <| Msg.GetUserPlaylists
                             , label = El.text "Load"
                             }
                         ]
@@ -213,7 +213,7 @@ renderMenu state =
                         [ El.text "Not signed in."
                         , Input.button
                             buttonStyle
-                            { onPress = Just Msg.SignIn
+                            { onPress = Just <| Msg.OAuth <| Msg.SignIn
                             , label = El.text "Sign in"
                             }
                         ]
@@ -288,12 +288,12 @@ renderPlayer state =
             ]
             [ Input.button
                 buttonStyle
-                { onPress = Just Msg.PlayPrevious
+                { onPress = Just <| Msg.Player <| Msg.PlayPrevious
                 , label = El.text "Play previous"
                 }
             , Input.button
                 buttonStyle
-                { onPress = Just Msg.PlayNext
+                { onPress = Just <| Msg.Player <| Msg.PlayNext
                 , label = El.text "Play next"
                 }
             ]
@@ -326,17 +326,18 @@ renderPlaylistList state =
                                         Nothing
                                 )
                             |> Msg.GetPlaylistVideos
+                            |> Msg.PlaylistList
                             |> Just
                     , label = El.text "Confirm"
                     }
                 , Input.button
                     buttonStyle
-                    { onPress = Just Msg.SetListAll
+                    { onPress = Just <| Msg.PlaylistList <| Msg.SetCheckedAll
                     , label = El.text "Select all"
                     }
                 , Input.button
                     buttonStyle
-                    { onPress = Just Msg.SetListNone
+                    { onPress = Just <| Msg.PlaylistList <| Msg.SetCheckedNone
                     , label = El.text "Deselect all"
                     }
                 ]
@@ -354,7 +355,7 @@ renderPlaylistList state =
                             ]
                             [ Input.checkbox
                                 []
-                                { onChange = Msg.SetListChecked listItem.playlist.id
+                                { onChange = Msg.PlaylistList << Msg.SetChecked listItem.playlist.id
                                 , icon = Input.defaultCheckbox
                                 , checked = listItem.checked
                                 , label = Input.labelRight [] <| El.text listItem.playlist.title
@@ -406,12 +407,12 @@ renderVideoList state =
                                 ]
                                 [ Input.button
                                     buttonStyle
-                                    { onPress = Just <| Msg.PlayVideo index
+                                    { onPress = Just <| Msg.VideoList <| Msg.PlayVideo index
                                     , label = El.text "Play"
                                     }
                                 , Input.button
                                     buttonStyle
-                                    { onPress = Just <| Msg.ToggleEditVideo index (not listItem.editOpen)
+                                    { onPress = Just (Msg.VideoList (Msg.ToggleEditVideo index (not listItem.editOpen)))
                                     , label = El.text "Edit"
                                     }
                                 , El.newTabLink
@@ -433,23 +434,23 @@ renderVideoList state =
                                         [ renderTimeInput
                                             { error = listItem.startAtError
                                             , label = "Start:"
-                                            , onChange = Msg.SetVideoStartAt index
-                                            , onLoseFocus = Msg.ValidateVideoStartAt index
+                                            , onChange = Msg.VideoList << Msg.SetVideoStartAt index
+                                            , onLoseFocus = Msg.VideoList <| Msg.ValidateVideoStartAt index
                                             , value = listItem.startAt
                                             }
                                             state
                                         , renderTimeInput
                                             { error = listItem.endAtError
                                             , label = "End:"
-                                            , onChange = Msg.SetVideoEndAt index
-                                            , onLoseFocus = Msg.ValidateVideoEndAt index
+                                            , onChange = Msg.VideoList << Msg.SetVideoEndAt index
+                                            , onLoseFocus = Msg.VideoList <| Msg.ValidateVideoEndAt index
                                             , value = listItem.endAt
                                             }
                                             state
                                         , Input.multiline
                                             []
                                             { label = Input.labelLeft [] <| El.text "Note:"
-                                            , onChange = Msg.SetVideoNote index
+                                            , onChange = Msg.VideoList << Msg.SetVideoNote index
                                             , placeholder = Nothing
                                             , spellcheck = False
                                             , text = listItem.note
@@ -459,12 +460,12 @@ renderVideoList state =
                                             ]
                                             [ Input.button
                                                 buttonStyle
-                                                { onPress = Just <| Msg.SaveVideoTimes index
+                                                { onPress = Just <| Msg.VideoList <| Msg.SaveVideoTimes index
                                                 , label = El.text "Save"
                                                 }
                                             , Input.button
                                                 buttonStyle
-                                                { onPress = Just <| Msg.ToggleEditVideo index False
+                                                { onPress = Just <| Msg.VideoList <| Msg.ToggleEditVideo index False
                                                 , label = El.text "Cancel"
                                                 }
                                             ]
@@ -476,7 +477,7 @@ renderVideoList state =
                                         [ El.text "Not signed in / not authorized"
                                         , Input.button
                                                 buttonStyle
-                                                { onPress = Just Msg.SignIn
+                                                { onPress = Just <| Msg.OAuth <| Msg.SignIn
                                                 , label = El.text "Sign in"
                                                 }
                                         ]

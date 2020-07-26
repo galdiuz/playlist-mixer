@@ -1,4 +1,11 @@
-module App.Msg exposing (Msg(..))
+module App.Msg exposing
+    ( Msg(..)
+    , OAuthMsg(..)
+    , PlayerMsg(..)
+    , PlaylistListMsg(..)
+    , StorageMsg(..)
+    , VideoListMsg(..)
+    )
 
 import Http
 import Json.Encode as Encode
@@ -12,39 +19,59 @@ import Youtube.Video exposing (Video)
 
 type Msg
     = NoOp
-    | YouTubeApiReady
+    | SetTime Time.Posix
+    | OAuth OAuthMsg
+    | Player PlayerMsg
+    | PlaylistList PlaylistListMsg
+    | Storage StorageMsg
+    | VideoList VideoListMsg
+
+
+type OAuthMsg
+    = ReceiveRandomBytes (List Int)
+    | SignIn
+
+
+type PlayerMsg
+    = PlayNext
+    | PlayPrevious
+    | PlayerError Encode.Value
     | PlayerReady
     | PlayerStateChange Encode.Value
-    | PlayerError Encode.Value
-    | SignIn
-    | ReceiveFromStorage App.StorageValue
-    | StorageChanged App.StorageValue
-    | StorageDeleted String
-    | SetTime Time.Posix
-    | ReceiveRandomBytes (List Int)
-    | GetUserPlaylists
-    | GetUserPlaylistsResult Int (List Playlist) (Result Http.Error (Page Playlist))
-    | GetPlaylistVideos (List Playlist)
+    | YouTubeApiReady
+
+
+type PlaylistListMsg
+    = GetPlaylistVideos (List Playlist)
     | GetPlaylistVideosResult
         (List App.VideoListItem)
         (List Playlist)
         Playlist
         Int
         (Result Http.Error (Page Video))
-    | SetListChecked String Bool
-    | SetListAll
-    | SetListNone
+    | GetUserPlaylists
+    | GetUserPlaylistsResult Int (List Playlist) (Result Http.Error (Page Playlist))
     | LoadListFromStorage
-    | ToggleEditVideo Int Bool
-    | SetVideoStartAt Int String
-    | SetVideoEndAt Int String
-    | SetVideoNote Int String
+    | SetChecked String Bool
+    | SetCheckedAll
+    | SetCheckedNone
+    | SetPlaylist (List App.VideoListItem)
+
+
+type StorageMsg
+    = ReceiveFromStorage App.StorageValue
+    | StorageChanged App.StorageValue
+    | StorageDeleted String
+
+
+type VideoListMsg
+    = PlayVideo Int
     | SaveVideoTimes Int
     | SaveVideoTimesResult Int (Result Http.Error Video)
-    | ValidateVideoStartAt Int
-    | ValidateVideoEndAt Int
-    | PlayVideo Int
-    | SetPlaylist (List App.VideoListItem)
     | ScrollToCurrentVideo
-    | PlayNext
-    | PlayPrevious
+    | SetVideoEndAt Int String
+    | SetVideoNote Int String
+    | SetVideoStartAt Int String
+    | ToggleEditVideo Int Bool
+    | ValidateVideoEndAt Int
+    | ValidateVideoStartAt Int
