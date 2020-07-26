@@ -42,8 +42,10 @@ type PlayerMsg
 
 
 type PlaylistListMsg
-    = GetPlaylistVideos (List Playlist)
+    = AppendPlaylist (List App.VideoListItem)
+    | GetPlaylistVideos (List App.VideoListItem -> Msg)
     | GetPlaylistVideosResult
+        (List App.VideoListItem -> Msg)
         (List App.VideoListItem)
         (List Playlist)
         Playlist

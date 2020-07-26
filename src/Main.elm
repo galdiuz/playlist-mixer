@@ -256,10 +256,43 @@ updatePlayer msg state =
 updatePlaylistList : Msg.PlaylistListMsg -> State -> ( State, Cmd Msg )
 updatePlaylistList msg state =
     case msg of
-        Msg.GetPlaylistVideos playlists ->
+        Msg.AppendPlaylist videos ->
+            let
+                videoInList listItem =
+                    state.videos
+                        |> Dict.values
+                        |> List.map (.video >> .id)
+                        |> List.member listItem.video.id
+            in
+            { state
+                | videos =
+                    videos
+                        |> List.filter (not << videoInList)
+                        |> List.indexedMap Tuple.pair
+                        |> List.map (Tuple.mapFirst ((+) (Dict.size state.videos)))
+                        |> Dict.fromList
+                        |> Dict.union state.videos
+                , lists = Dict.empty
+            }
+                |> saveListToStorage
+
+        Msg.GetPlaylistVideos andThen ->
+            let
+                playlists =
+                    state.lists
+                        |> Dict.values
+                        |> List.filterMap
+                            (\listItem ->
+                                if listItem.checked then
+                                    Just listItem.playlist
+                                else
+                                    Nothing
+                            )
+            in
             case playlists of
                 firstPlaylist :: remaining ->
                     fetchPlaylistPage
+                        andThen
                         []
                         remaining
                         firstPlaylist
@@ -272,7 +305,7 @@ updatePlaylistList msg state =
                 [] ->
                     Cmd.Extra.withNoCmd state
 
-        Msg.GetPlaylistVideosResult videoListItems remainingPlaylists currentPlaylist currentPage result ->
+        Msg.GetPlaylistVideosResult andThen videoListItems remainingPlaylists currentPlaylist currentPage result ->
             case result of
                 Ok page ->
                     let
@@ -284,6 +317,7 @@ updatePlaylistList msg state =
                     case ( page.nextPageToken, remainingPlaylists) of
                         ( Just nextPageToken, _ ) ->
                             fetchPlaylistPage
+                                andThen
                                 newVideoListItems
                                 remainingPlaylists
                                 currentPlaylist
@@ -293,6 +327,7 @@ updatePlaylistList msg state =
 
                         ( Nothing, nextPlaylist :: nextRemaining ) ->
                             fetchPlaylistPage
+                                andThen
                                 newVideoListItems
                                 nextRemaining
                                 nextPlaylist
@@ -309,7 +344,7 @@ updatePlaylistList msg state =
                                 |> Cmd.Extra.withCmd
                                     (newVideoListItems
                                         |> Random.List.shuffle
-                                        |> Random.generate (Msg.PlaylistList << Msg.SetPlaylist)
+                                        |> Random.generate andThen
                                     )
 
                 Err err ->
@@ -787,14 +822,15 @@ appendMessage message state =
 
 
 fetchPlaylistPage :
-    List App.VideoListItem
+    (List App.VideoListItem -> Msg)
+    -> List App.VideoListItem
     -> List Playlist
     -> Playlist
     -> Int
     -> Maybe String
     -> State
     -> ( State, Cmd Msg )
-fetchPlaylistPage videoListItems remainingPlaylists playlist page pageToken state =
+fetchPlaylistPage andThen videoListItems remainingPlaylists playlist page pageToken state =
     state
         |> appendMessage
             ("Fetching page {{}} of playlist '{{}}'..."
@@ -806,7 +842,9 @@ fetchPlaylistPage videoListItems remainingPlaylists playlist page pageToken stat
                 playlist.id
                 state.token
                 pageToken
-                (Msg.PlaylistList << Msg.GetPlaylistVideosResult videoListItems remainingPlaylists playlist page)
+                (Msg.GetPlaylistVideosResult andThen videoListItems remainingPlaylists playlist page
+                    >> Msg.PlaylistList
+                )
             )
 
 

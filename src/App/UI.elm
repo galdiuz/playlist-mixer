@@ -339,6 +339,13 @@ renderPlaylistList state =
     if Dict.isEmpty state.lists then
         El.none
     else
+        let
+            hasSelectedLists =
+                not <| List.isEmpty (List.filter .checked (Dict.values state.lists))
+
+            hasPlaylist =
+                not <| Dict.isEmpty state.videos
+        in
         El.column
             [ El.paddingXY 0 5
             , El.spacing 10
@@ -351,29 +358,58 @@ renderPlaylistList state =
             , El.row
                 [ El.spacing 5
                 ]
-                [ if List.isEmpty (List.filter .checked (Dict.values state.lists)) then
-                    El.el
-                        disabledButtonStyle
-                        <| El.text "Confirm"
-                  else
-                    Input.button
-                        buttonStyle
-                        { onPress =
-                            state.lists
-                                |> Dict.values
-                                |> List.filterMap
-                                    (\listItem ->
-                                        if listItem.checked then
-                                            Just listItem.playlist
-                                        else
-                                            Nothing
-                                    )
-                                |> Msg.GetPlaylistVideos
-                                |> Msg.PlaylistList
-                                |> Just
-                        , label = El.text "Confirm"
-                        }
-                , Input.button
+                <| case ( hasSelectedLists, hasPlaylist ) of
+                    ( True, True ) ->
+                        [ Input.button
+                            buttonStyle
+                            { onPress =
+                                (Msg.PlaylistList << Msg.SetPlaylist)
+                                    |> Msg.GetPlaylistVideos
+                                    |> Msg.PlaylistList
+                                    |> Just
+                            , label = El.text "Confirm and replace current list"
+                            }
+                        , Input.button
+                            buttonStyle
+                            { onPress =
+                                (Msg.PlaylistList << Msg.AppendPlaylist)
+                                    |> Msg.GetPlaylistVideos
+                                    |> Msg.PlaylistList
+                                    |> Just
+                            , label = El.text "Confirm and append to current list"
+                            }
+                        ]
+
+                    ( False, True ) ->
+                        [ El.el
+                            disabledButtonStyle
+                            <| El.text "Confirm and replace current list"
+                        , El.el
+                            disabledButtonStyle
+                            <| El.text "Confirm and append to current list"
+                        ]
+
+                    ( True, False ) ->
+                        [ Input.button
+                            buttonStyle
+                            { onPress =
+                                (Msg.PlaylistList << Msg.SetPlaylist)
+                                    |> Msg.GetPlaylistVideos
+                                    |> Msg.PlaylistList
+                                    |> Just
+                            , label = El.text "Confirm"
+                            }
+                        ]
+
+                    ( False, False ) ->
+                        [ El.el
+                            disabledButtonStyle
+                            <| El.text "Confirm"
+                        ]
+            , El.row
+                [ El.spacing 5
+                ]
+                [ Input.button
                     buttonStyle
                     { onPress = Just <| Msg.PlaylistList <| Msg.SetCheckedAll
                     , label = El.text "Select all"
