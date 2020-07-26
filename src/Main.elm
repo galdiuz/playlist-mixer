@@ -22,7 +22,7 @@ import Task
 import Time
 import Tuple2
 import Url exposing (Url)
-import Url.Parser
+import Url.Parser exposing ((</>))
 import Url.Parser.Query
 
 import App exposing (Flags, State)
@@ -74,6 +74,7 @@ init flags url navigationKey =
     , theme = App.defaultTheme
     , oauthResult = oauthResult
     , playlistsByUrl = ""
+    , playlistsByChannel = ""
     }
         |> Cmd.Extra.withCmd
             ( case token of
@@ -386,6 +387,28 @@ updatePlaylistList msg state =
             state
                 |> Cmd.Extra.withCmd (Ports.loadFromStorage state.playlistStorageKey)
 
+        Msg.LoadPlaylistsByChannel ->
+            let
+                channelId =
+                    state.playlistsByChannel
+                        |> Url.fromString
+                        |> Maybe.andThen
+                            (Url.Parser.parse
+                                (Url.Parser.s "channel" </> Url.Parser.string)
+                            )
+                        |> Maybe.withDefault state.playlistsByChannel
+            in
+            { state |
+                messages = "Fetching page 1 of channel playlists..." :: state.messages
+            }
+                |> Cmd.Extra.withCmd
+                    (Youtube.Api.getPlaylistsByChannel
+                        channelId
+                        state.token
+                        Nothing
+                        (Msg.PlaylistList << Msg.GetPlaylistsResult 1 [])
+                    )
+
         Msg.LoadPlaylistsByUrl ->
             let
                 playlistIds =
@@ -395,14 +418,12 @@ updatePlaylistList msg state =
                             (\string ->
                                 string
                                     |> Url.fromString
-                                    |> Debug.log "url"
                                     |> Maybe.andThen
                                         (\url ->
                                             Url.Parser.parse
                                                 (Url.Parser.query <| Url.Parser.Query.string "list")
                                                 { url | path = "" }
                                         )
-                                    |> Debug.log "parsed"
                                     |> Maybe.Extra.join
                                     |> Maybe.withDefault string
 
@@ -468,6 +489,12 @@ updatePlaylistList msg state =
             }
                 |> saveListToStorage
                 |> Cmd.Extra.addCmd (Ports.createPlayer App.UI.playerId)
+
+        Msg.SetPlaylistsByChannel string ->
+            { state
+                | playlistsByChannel = string
+            }
+                |> Cmd.Extra.withNoCmd
 
         Msg.SetPlaylistsByUrl string ->
             { state

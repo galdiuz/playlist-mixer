@@ -53,10 +53,12 @@ type PlaylistListMsg
     | GetUserPlaylists
     | LoadListFromStorage
     | LoadPlaylistsByUrl
+    | LoadPlaylistsByChannel
     | SetChecked String Bool
     | SetCheckedAll
     | SetCheckedNone
     | SetPlaylist (List App.VideoListItem)
+    | SetPlaylistsByChannel String
     | SetPlaylistsByUrl String
 
 

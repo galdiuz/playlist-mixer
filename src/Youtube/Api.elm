@@ -1,6 +1,7 @@
 module Youtube.Api exposing
     ( getUserPlaylists
     , getPlaylistVideos
+    , getPlaylistsByChannel
     , getPlaylistsByIds
     , updatePlaylistVideo
     )
@@ -106,6 +107,32 @@ playlistVideosUrl playlistId pageToken =
         [ Url.Builder.string "part" "snippet,contentDetails"
         , Url.Builder.string "playlistId" playlistId
         , Url.Builder.int "maxResults" 50
+        , Url.Builder.string "pageToken" <| Maybe.withDefault "" pageToken
+        ]
+
+
+getPlaylistsByChannel :
+    String
+    -> Maybe App.Token
+    -> Maybe String
+    -> (Result Http.Error (Page Playlist) -> msg)
+    -> Cmd msg
+getPlaylistsByChannel channelId oauthToken pageToken toMsg =
+    get
+        { url = playlistsByChannelUrl channelId pageToken
+        , expect = Http.expectJson toMsg (Youtube.Page.decoder playlistDecoder)
+        , token = oauthToken
+        }
+
+
+playlistsByChannelUrl : String -> Maybe String -> String
+playlistsByChannelUrl channelId pageToken =
+    Url.Builder.crossOrigin
+        "https://www.googleapis.com/youtube/v3/playlists"
+        []
+        [ Url.Builder.string "part" "snippet"
+        , Url.Builder.int "maxResults" 50
+        , Url.Builder.string "channelId" channelId
         , Url.Builder.string "pageToken" <| Maybe.withDefault "" pageToken
         ]
 

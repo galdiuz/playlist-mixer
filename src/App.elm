@@ -51,6 +51,7 @@ type alias State =
     , theme : Theme
     , oauthResult : OAuth.AuthorizationResult
     , playlistsByUrl : String
+    , playlistsByChannel : String
     }
 
 

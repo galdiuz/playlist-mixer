@@ -45,6 +45,7 @@ render state =
                     [ renderHeader state
                     , renderPlayer state
                     , renderVideoList state
+                    , renderWelcomeMessage state
                     , renderPlaylistMenu state
                     , renderPlaylistList state
                     , renderMessages state
@@ -114,12 +115,26 @@ renderSpacer state =
         El.none
 
 
+renderWelcomeMessage : State -> Element msg
+renderWelcomeMessage state =
+    if Dict.isEmpty state.videos then
+        El.paragraph
+            []
+            [ El.text
+                <| "Welcome to YouTube Playlist! This application lets you mix multiple YouTube"
+                ++ " playlists together into one, playing them all in one big shuffled list."
+            ]
+      else
+        El.none
+
+
 renderPlaylistMenu : State -> Element Msg
 renderPlaylistMenu state =
     El.column
         [ El.spacing 30
+        , El.width El.fill
         ]
-        [ if state.playlistInStorage then
+        [ if state.playlistInStorage && Dict.isEmpty state.videos then
             El.column
                 [ El.spacing 10
                 ]
@@ -135,83 +150,105 @@ renderPlaylistMenu state =
                 ]
           else
             El.none
-        , El.column
-            [ El.spacing 10
-            ]
-            [ El.el
-                [ Font.size 24
+
+        , if Maybe.Extra.isJust state.token then
+            El.column
+                [ El.spacing 30
+                , El.width El.fill
                 ]
-                <| El.text "Load playlists by URL"
-            , Input.multiline
-                []
-                { label = Input.labelHidden ""
-                , onChange = Msg.PlaylistList << Msg.SetPlaylistsByUrl
-                , placeholder =
-                    Input.placeholder
-                        []
-                        (El.text "https://www.youtube.com/playlist?list=aaabbbccc")
-                        |> Just
-                , spellcheck = False
-                , text = state.playlistsByUrl
-                }
-            , Input.button
-                buttonStyle
-                { onPress = Just <| Msg.PlaylistList <| Msg.LoadPlaylistsByUrl
-                , label = El.text "Load"
-                }
-            ]
-        -- , El.column
-        --     [ El.spacing 10
-        --     ]
-        --     [ El.el
-        --         [ Font.size 24
-        --         ]
-        --         <| El.text "Load by user ID"
-        --     , Input.text
-        --         []
-        --         { label = Input.labelHidden ""
-        --         , onChange = \_ -> Msg.NoOp
-        --         , placeholder = Nothing
-        --         , text = ""
-        --         }
-        --     , Input.button
-        --         buttonStyle
-        --         { onPress = Nothing
-        --         , label = El.text "Load"
-        --         }
-        --     ]
-        , El.column
-            [ El.spacing 10
-            ]
-            [ El.el
-                [ Font.size 24
-                ]
-                <| El.text "Load playlists from your YouTube account"
-            , case state.token of
-                Just _ ->
-                    El.column
-                        [ El.spacing 10
+                [ El.column
+                    [ El.spacing 10
+                    ]
+                    [ El.el
+                        [ Font.size 24
                         ]
-                        [ El.text <| "Signed in."
-                        , Input.button
+                        <| El.text "Load playlists from your YouTube account"
+                    , Input.button
+                        buttonStyle
+                        { onPress = Just <| Msg.PlaylistList <| Msg.GetUserPlaylists
+                        , label = El.text "Load"
+                        }
+                    ]
+                , El.column
+                    [ El.spacing 10
+                    , El.width El.fill
+                    ]
+                    [ El.el
+                        [ Font.size 24
+                        ]
+                        <| El.text "Load playlists by URL or ID"
+                    , Input.multiline
+                        [ El.width El.fill ]
+                        { label = Input.labelHidden ""
+                        , onChange = Msg.PlaylistList << Msg.SetPlaylistsByUrl
+                        , placeholder =
+                            Input.placeholder
+                                []
+                                (El.text "https://www.youtube.com/playlist?list=aaabbbccc")
+                                |> Just
+                        , spellcheck = False
+                        , text = state.playlistsByUrl
+                        }
+                    , if String.isEmpty state.playlistsByUrl then
+                        El.el
+                            disabledButtonStyle
+                            <| El.text "Load"
+                      else
+                        Input.button
                             buttonStyle
-                            { onPress = Just <| Msg.PlaylistList <| Msg.GetUserPlaylists
+                            { onPress = Just <| Msg.PlaylistList <| Msg.LoadPlaylistsByUrl
                             , label = El.text "Load"
                             }
+                    ]
+                , El.column
+                    [ El.spacing 10
+                    , El.width El.fill
+                    ]
+                    [ El.el
+                        [ Font.size 24
                         ]
-
-                Nothing ->
-                    El.column
-                        [ El.spacing 10
-                        ]
-                        [ El.text "Not signed in."
-                        , Input.button
+                        <| El.text "Load playlists by channel URL or ID"
+                    , Input.text
+                        []
+                        { label = Input.labelHidden ""
+                        , onChange = Msg.PlaylistList << Msg.SetPlaylistsByChannel
+                        , placeholder =
+                            Input.placeholder
+                                []
+                                (El.text "https://www.youtube.com/channel/aaabbbccc")
+                                |> Just
+                        , text = state.playlistsByChannel
+                        }
+                    , if String.isEmpty state.playlistsByChannel then
+                        El.el
+                            disabledButtonStyle
+                            <| El.text "Load"
+                      else
+                        Input.button
                             buttonStyle
-                            { onPress = Just <| Msg.OAuth <| Msg.SignIn
-                            , label = El.text "Sign in"
+                            { onPress = Just <| Msg.PlaylistList <| Msg.LoadPlaylistsByChannel
+                            , label = El.text "Load"
                             }
-                        ]
-            ]
+                    ]
+                ]
+
+          else
+            El.column
+                [ El.spacing 10
+                ]
+                [ El.paragraph
+                    []
+                    [ El.text
+                        <| "Usage of YouTube's APIs requires sign in to a Google account. Allowing the app to"
+                        ++ " read or manage your YouTube account is not mandatory, and is only required if you"
+                        ++ " want to access your private playlists."
+                    ]
+                , Input.button
+                    buttonStyle
+                    { onPress = Just <| Msg.OAuth <| Msg.SignIn
+                    , label = El.text "Sign in"
+                    }
+                ]
         ]
 
 
@@ -307,26 +344,35 @@ renderPlaylistList state =
             , El.spacing 10
             , El.width El.fill
             ]
-            [ El.row
+            [ El.el
+                [ Font.size 24
+                ]
+                <| El.text "Select Playlists to mix"
+            , El.row
                 [ El.spacing 5
                 ]
-                [ Input.button
-                    buttonStyle
-                    { onPress =
-                        state.lists
-                            |> Dict.values
-                            |> List.filterMap
-                                (\listItem ->
-                                    if listItem.checked then
-                                        Just listItem.playlist
-                                    else
-                                        Nothing
-                                )
-                            |> Msg.GetPlaylistVideos
-                            |> Msg.PlaylistList
-                            |> Just
-                    , label = El.text "Confirm"
-                    }
+                [ if List.isEmpty (List.filter .checked (Dict.values state.lists)) then
+                    El.el
+                        disabledButtonStyle
+                        <| El.text "Confirm"
+                  else
+                    Input.button
+                        buttonStyle
+                        { onPress =
+                            state.lists
+                                |> Dict.values
+                                |> List.filterMap
+                                    (\listItem ->
+                                        if listItem.checked then
+                                            Just listItem.playlist
+                                        else
+                                            Nothing
+                                    )
+                                |> Msg.GetPlaylistVideos
+                                |> Msg.PlaylistList
+                                |> Just
+                        , label = El.text "Confirm"
+                        }
                 , Input.button
                     buttonStyle
                     { onPress = Just <| Msg.PlaylistList <| Msg.SetCheckedAll
@@ -348,7 +394,7 @@ renderPlaylistList state =
                 <| List.map
                     (\listItem ->
                         El.row
-                            [ El.spacing 10
+                            [ El.spacing 20
                             ]
                             [ Input.checkbox
                                 []
@@ -539,7 +585,7 @@ renderMessages state =
         El.column
             [ El.padding 10
             , El.scrollbarY
-            , El.height <| El.minimum (min 200 (List.length state.messages * 20)) <| El.shrink
+            , El.height <| El.minimum (min 200 (List.length state.messages * 30)) <| El.shrink
             ]
             <| List.map El.text state.messages
 
@@ -558,6 +604,16 @@ buttonStyle =
     , Border.width 1
     , Border.rounded 5
     ]
+
+
+disabledButtonStyle : List (El.Attribute msg)
+disabledButtonStyle =
+    List.append
+        buttonStyle
+        [ Border.dashed
+        , Border.color <| El.rgb 0.5 0.5 0.5
+        , Font.color <| El.rgb 0.5 0.5 0.5
+        ]
 
 
 paddingZero : { top : Int, bottom : Int, left : Int, right : Int }
