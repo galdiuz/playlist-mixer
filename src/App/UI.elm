@@ -30,27 +30,31 @@ render : State -> Html Msg
 render state =
     El.layout
         [ El.width El.fill
-        , El.height El.fill
+        , El.height El.shrink
         ]
         <| case state.oauthResult of
             OAuth.Empty ->
-                El.column
+                El.el
                     [ Background.color state.theme.bg
-                    , El.width <| El.maximum 800 El.fill
-                    , El.height El.fill
-                    , El.centerX
                     , Font.color state.theme.fg
-                    , El.spacing 30
+                    , El.width El.fill
+                    , El.height El.fill
                     ]
-                    [ renderHeader state
-                    , renderPlayer state
-                    , renderVideoList state
-                    , renderWelcomeMessage state
-                    , renderPlaylistMenu state
-                    , renderPlaylistList state
-                    , renderMessages state
-                    , renderFooter state
-                    ]
+                    <| El.column
+                        [ El.width <| El.maximum 800 El.fill
+                        , El.height El.fill
+                        , El.centerX
+                        , El.spacing 30
+                        ]
+                        [ renderHeader state
+                        , renderPlayer state
+                        , renderVideoList state
+                        , renderWelcomeMessage state
+                        , renderPlaylistMenu state
+                        , renderPlaylistList state
+                        , renderMessages state
+                        , renderFooter state
+                        ]
 
             OAuth.Success _ ->
                 El.paragraph
@@ -86,22 +90,37 @@ renderHeader state =
         ]
 
 
-renderFooter : State -> Element msg
+renderFooter : State -> Element Msg
 renderFooter state =
     El.column
         [ El.width El.fill
+        , El.spacing 10
         ]
         [ renderSpacer state
-        , El.newTabLink
-            []
-            { label = El.text "Privacy policy"
-            , url = "/privacy-policy.html"
-            }
-        , El.newTabLink
-            []
-            { label = El.text "View source on GitHub"
-            , url = "https://github.com/galdiuz/youtube-playlist"
-            }
+        , El.row
+            [ El.spacing 10
+            ]
+            [ El.newTabLink
+                buttonStyle
+                { label = El.text "Privacy policy"
+                , url = "/privacy-policy.html"
+                }
+            , El.newTabLink
+                buttonStyle
+                { label = El.text "View source on GitHub"
+                , url = "https://github.com/galdiuz/youtube-playlist"
+                }
+            , Input.button
+                buttonStyle
+                { label = El.text "Light theme"
+                , onPress = Just <| Msg.SetTheme App.lightTheme
+                }
+            , Input.button
+                buttonStyle
+                { label = El.text "Dark theme"
+                , onPress = Just <| Msg.SetTheme App.darkTheme
+                }
+            ]
         ]
 
 
@@ -110,7 +129,7 @@ renderSpacer state =
     El.el
         [ El.width El.fill
         , El.height <| El.px 1
-        , Background.color <| El.rgb 0.5 0.5 0.5
+        , Background.color state.theme.disabled
         ]
         El.none
 
@@ -178,7 +197,9 @@ renderPlaylistMenu state =
                         ]
                         <| El.text "Load playlists by URL or ID"
                     , Input.multiline
-                        [ El.width El.fill ]
+                        [ Background.color state.theme.bg
+                        , El.width El.fill
+                        ]
                         { label = Input.labelHidden ""
                         , onChange = Msg.PlaylistList << Msg.SetPlaylistsByUrl
                         , placeholder =
@@ -191,7 +212,7 @@ renderPlaylistMenu state =
                         }
                     , if String.isEmpty state.playlistsByUrl then
                         El.el
-                            disabledButtonStyle
+                            (disabledButtonStyle state)
                             <| El.text "Load"
                       else
                         Input.button
@@ -209,7 +230,8 @@ renderPlaylistMenu state =
                         ]
                         <| El.text "Load playlists by channel URL or ID"
                     , Input.text
-                        []
+                        [ Background.color state.theme.bg
+                        ]
                         { label = Input.labelHidden ""
                         , onChange = Msg.PlaylistList << Msg.SetPlaylistsByChannel
                         , placeholder =
@@ -221,7 +243,7 @@ renderPlaylistMenu state =
                         }
                     , if String.isEmpty state.playlistsByChannel then
                         El.el
-                            disabledButtonStyle
+                            (disabledButtonStyle state)
                             <| El.text "Load"
                       else
                         Input.button
@@ -382,10 +404,10 @@ renderPlaylistList state =
 
                     ( False, True ) ->
                         [ El.el
-                            disabledButtonStyle
+                            (disabledButtonStyle state)
                             <| El.text "Confirm and replace current list"
                         , El.el
-                            disabledButtonStyle
+                            (disabledButtonStyle state)
                             <| El.text "Confirm and append to current list"
                         ]
 
@@ -403,7 +425,7 @@ renderPlaylistList state =
 
                     ( False, False ) ->
                         [ El.el
-                            disabledButtonStyle
+                            (disabledButtonStyle state)
                             <| El.text "Confirm"
                         ]
             , El.row
@@ -423,7 +445,10 @@ renderPlaylistList state =
             , El.column
                 [ El.spacing 5
                 , El.padding 5
-                , El.height <| El.maximum 400 <| El.shrink
+                , El.height
+                    (El.shrink
+                        |> El.maximum 400
+                    )
                 , El.width El.fill
                 , El.scrollbarY
                 ]
@@ -459,7 +484,7 @@ renderVideoList state =
       else
         El.column
             [ El.scrollbarY
-            , El.height <| El.minimum (min 600 (Dict.size state.videos * 50)) <| El.shrink
+            , El.height <| El.maximum 600 El.shrink
             , El.htmlAttribute <| HA.id playlistId
             , El.width El.fill
             ]
@@ -586,13 +611,14 @@ renderTimeInput :
     -> Element msg
 renderTimeInput data state =
     Input.text
-        [ El.width <| El.px 75
+        [ Background.color state.theme.bg
+        , El.width <| El.px 75
         , El.below
             ( case data.error of
                 Just error ->
                     El.el
                         [ Background.color state.theme.bg
-                        , Border.color <| El.rgb 1 0 0
+                        , Border.color state.theme.error
                         , Border.width 1
                         , Border.rounded 5
                         , El.padding 5
@@ -603,8 +629,7 @@ renderTimeInput data state =
                     El.none
             )
         , Events.onLoseFocus data.onLoseFocus
-        , Font.color <| El.rgb 0 0 0
-        , maybeAttribute data.error <| Border.color <| El.rgb 1 0 0
+        , maybeAttribute data.error <| Border.color state.theme.error
         ]
         { label = Input.labelLeft [] <| El.text data.label
         , onChange = data.onChange
@@ -621,7 +646,7 @@ renderMessages state =
         El.column
             [ El.padding 10
             , El.scrollbarY
-            , El.height <| El.minimum (min 200 (List.length state.messages * 30)) <| El.shrink
+            , El.height <| El.maximum 200 El.shrink
             ]
             <| List.map El.text state.messages
 
@@ -642,13 +667,13 @@ buttonStyle =
     ]
 
 
-disabledButtonStyle : List (El.Attribute msg)
-disabledButtonStyle =
+disabledButtonStyle : State -> List (El.Attribute msg)
+disabledButtonStyle state =
     List.append
         buttonStyle
         [ Border.dashed
-        , Border.color <| El.rgb 0.5 0.5 0.5
-        , Font.color <| El.rgb 0.5 0.5 0.5
+        , Border.color state.theme.disabled
+        , Font.color state.theme.disabled
         ]
 
 

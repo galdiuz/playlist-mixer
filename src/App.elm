@@ -58,6 +58,8 @@ type alias State =
 type alias Theme =
     { bg : Element.Color
     , fg : Element.Color
+    , disabled : Element.Color
+    , error : Element.Color
     }
 
 
@@ -99,12 +101,21 @@ type alias VideoListItem =
     }
 
 
-defaultTheme : Theme
-defaultTheme =
-    { bg = Element.rgb 1 1 1
-    , fg = Element.rgb 0 0 0
-    -- { bg = Element.rgb 0.1 0.1 0.1
-    -- , fg = Element.rgb 0.8 0.8 0.8
+lightTheme : Theme
+lightTheme =
+    { bg = Element.rgb 0.9 0.9 0.9
+    , fg = Element.rgb 0.1 0.1 0.1
+    , disabled = Element.rgb 0.5 0.5 0.5
+    , error = Element.rgb 1 0 0
+    }
+
+
+darkTheme : Theme
+darkTheme =
+    { bg = Element.rgb 0.1 0.1 0.1
+    , fg = Element.rgb 0.7 0.7 0.7
+    , disabled = Element.rgb 0.4 0.4 0.4
+    , error = Element.rgb 1 0 0
     }
 
 
@@ -152,6 +163,7 @@ decodePlaylist =
         { current = current
         , items = items
         }
+
 
 encodeToken : Token -> Encode.Value
 encodeToken token =

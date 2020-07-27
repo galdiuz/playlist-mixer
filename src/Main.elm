@@ -71,7 +71,7 @@ init flags url navigationKey =
     , tokenStorageKey = flags.tokenStorageKey
     , oauthClientId = flags.oauthClientId
     , youtubeApiReady = False
-    , theme = App.defaultTheme
+    , theme = App.darkTheme
     , oauthResult = oauthResult
     , playlistsByUrl = ""
     , playlistsByChannel = ""
@@ -157,6 +157,12 @@ update msg state =
                 | time = Time.posixToMillis time
             }
                 |> checkTokenExpiration
+
+        Msg.SetTheme theme ->
+            { state
+                | theme = theme
+            }
+                |> Cmd.Extra.withNoCmd
 
         Msg.OAuth oauthMsg ->
             updateOAuth oauthMsg state
@@ -669,6 +675,7 @@ updateVideoList msg state =
                                     (\listItem ->
                                         { listItem
                                             | video = video
+                                            , editOpen = False
                                         }
                                     )
                                 )
