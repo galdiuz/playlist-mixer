@@ -15,6 +15,7 @@ import OAuth.Implicit as OAuth
 import Json.Encode as Encode
 import String.Format
 import Url exposing (Url)
+import Url.Builder
 import Json.Decode as Decode
 import Json.Decode.Field as Field
 import Json.Encode as Encode
@@ -217,3 +218,10 @@ secondsToString maybe =
 
         Nothing ->
             ""
+
+
+privacyPolicyUrl : State -> String
+privacyPolicyUrl state =
+    Url.Builder.relative
+        [ "privacy-policy.md" ]
+        []

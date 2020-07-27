@@ -103,7 +103,7 @@ renderFooter state =
             [ El.newTabLink
                 buttonStyle
                 { label = El.text "Privacy policy"
-                , url = "/privacy-policy.html"
+                , url = App.privacyPolicyUrl state
                 }
             , El.newTabLink
                 buttonStyle
@@ -261,9 +261,17 @@ renderPlaylistMenu state =
                 [ El.paragraph
                     []
                     [ El.text
-                        <| "Usage of YouTube's APIs requires sign in to a Google account. Allowing the app to"
-                        ++ " read or manage your YouTube account is not mandatory, and is only required if you"
-                        ++ " want to access your private playlists."
+                        <| "Usage of YouTube's APIs requires sign in to a Google account. Allowing"
+                        ++ " the app to read or manage your YouTube account is optional, and is only"
+                        ++ " required if you want to access your private playlists. For more"
+                        ++ " information, refer to "
+                    , El.newTabLink
+                        [ Font.underline
+                        ]
+                        { label = El.text "YouTube Playlist's privacy policy"
+                        , url = App.privacyPolicyUrl state
+                        }
+                    , El.text "."
                     ]
                 , Input.button
                     buttonStyle
