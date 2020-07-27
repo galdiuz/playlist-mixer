@@ -1,5 +1,5 @@
 SHELL = /bin/sh
-BUILD_PATH = build/app.js
+BUILD_PATH = app.js
 MAIN_FILE = src/Main.elm
 
 
