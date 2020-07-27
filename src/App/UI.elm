@@ -569,7 +569,8 @@ renderVideoListItem state (index, listItem) =
                             }
                             state
                         , Input.multiline
-                            []
+                            [ Background.color state.theme.bg
+                            ]
                             { label = Input.labelLeft [] <| El.text "Note:"
                             , onChange = Msg.VideoList << Msg.SetVideoNote index
                             , placeholder = Nothing

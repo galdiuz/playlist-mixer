@@ -228,18 +228,34 @@ updatePlayer msg state =
                 |> Cmd.Extra.andThen saveListToStorage
                 |> Cmd.Extra.andThen scrollToCurrent
 
-        Msg.PlayerError data ->
-            Cmd.Extra.withNoCmd state
+        Msg.PlayerError value ->
+            case Decode.decodeValue (Decode.field "data" PlayerError.decoder) value of
+                Ok PlayerError.NotFound ->
+                    -- TODO: Log error
+                    { state
+                        | current = App.nextIndex state
+                    }
+                        |> playCurrentVideo
+                        |> Cmd.Extra.andThen scrollToCurrent
+                        |> Cmd.Extra.andThen saveListToStorage
+
+                Ok PlayerError.NoEmbed ->
+                    -- TODO: Log error
+                    { state
+                        | current = App.nextIndex state
+                    }
+                        |> playCurrentVideo
+                        |> Cmd.Extra.andThen scrollToCurrent
+                        |> Cmd.Extra.andThen saveListToStorage
+
+                _ ->
+                    Cmd.Extra.withNoCmd state
 
         Msg.PlayerReady ->
             playCurrentVideo state
 
-        Msg.PlayerStateChange data ->
-            let
-                decoder =
-                    Decode.field "data" PlayerState.decoder
-            in
-            case Decode.decodeValue decoder data of
+        Msg.PlayerStateChange value ->
+            case Decode.decodeValue (Decode.field "data" PlayerState.decoder) value of
                 Ok PlayerState.Ended ->
                     { state
                         | current = App.nextIndex state
