@@ -12,6 +12,9 @@ import Element.Border as Border
 import Element.Events as Events
 import Element.Font as Font
 import Element.Input as Input
+import FontAwesome.Icon
+import FontAwesome.Solid
+import FontAwesome.Styles
 import Html exposing (Html)
 import Html.Attributes as HA
 import Maybe.Extra
@@ -54,6 +57,7 @@ render state =
                         , renderPlaylistList state
                         , renderMessages state
                         , renderFooter state
+                        , El.html FontAwesome.Styles.css
                         ]
 
             OAuth.Success _ ->
@@ -94,6 +98,7 @@ renderFooter : State -> Element Msg
 renderFooter state =
     El.column
         [ El.width El.fill
+        , El.paddingEach { paddingZero | bottom = 10 }
         , El.spacing 10
         ]
         [ renderSpacer state
@@ -102,12 +107,12 @@ renderFooter state =
             ]
             [ El.newTabLink
                 buttonStyle
-                { label = El.text "Privacy policy"
+                { label = linkLabel "Privacy policy"
                 , url = App.privacyPolicyUrl state
                 }
             , El.newTabLink
                 buttonStyle
-                { label = El.text "View source on GitHub"
+                { label = linkLabel "View source on GitHub"
                 , url = "https://github.com/galdiuz/youtube-playlist"
                 }
             , Input.button
@@ -121,6 +126,18 @@ renderFooter state =
                 , onPress = Just <| Msg.SetTheme App.darkTheme
                 }
             ]
+        ]
+
+
+linkLabel : String -> Element msg
+linkLabel text =
+    El.row
+        [ El.spacing 5
+        ]
+        [ El.text text
+        , El.el
+            []
+            <| El.html <| FontAwesome.Icon.viewIcon FontAwesome.Solid.externalLinkAlt
         ]
 
 
@@ -474,8 +491,8 @@ renderPlaylistList state =
                                 }
                             , El.newTabLink
                                 buttonStyle
-                                { url = Playlist.url listItem.playlist
-                                , label = El.text "Open playlist"
+                                { label = linkLabel "Open playlist"
+                                , url = Playlist.url listItem.playlist
                                 }
                             ]
                     )
@@ -538,13 +555,13 @@ renderVideoListItem state (index, listItem) =
                     }
                 , El.newTabLink
                     buttonStyle
-                    { url = Video.url listItem.video
-                    , label = El.text "Open Video"
+                    { label = linkLabel "Open Video"
+                    , url = Video.url listItem.video
                     }
                 , El.newTabLink
                     buttonStyle
-                    { url = Playlist.url listItem.playlist
-                    , label = El.text "Open Playlist"
+                    { label = linkLabel "Open Playlist"
+                    , url = Playlist.url listItem.playlist
                     }
                 ]
             , if listItem.editOpen then

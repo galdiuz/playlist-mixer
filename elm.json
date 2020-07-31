@@ -23,6 +23,7 @@
             "elm-community/random-extra": "3.1.0",
             "ivadzy/bbase64": "1.1.1",
             "jorgengranseth/elm-string-format": "1.0.1",
+            "lattyware/elm-fontawesome": "4.0.0",
             "mdgriffith/elm-ui": "1.1.7",
             "truqu/elm-oauth2": "7.0.0",
             "webbhuset/elm-json-decode": "1.1.0"
@@ -31,6 +32,7 @@
             "danfishgold/base64-bytes": "1.0.3",
             "elm/file": "1.0.5",
             "elm/parser": "1.1.0",
+            "elm/svg": "1.0.1",
             "elm/virtual-dom": "1.0.2",
             "folkertdev/elm-sha2": "1.0.0",
             "owanturist/elm-union-find": "1.0.0",
