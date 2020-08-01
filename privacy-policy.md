@@ -1,6 +1,6 @@
-# YouTube Playlist - Privacy policy
+# Playlist Mixer - Privacy policy
 
-YouTube Playlist does not collect any personal data. Any data retrieved from the user's YouTube
+Playlist Mixer does not collect any personal data. Any data retrieved from the user's YouTube
 account is only ever stored locally in the user's browser, and never sent elsewhere.
 
 

@@ -127,7 +127,7 @@ getToken flags oauthResult =
 view : State -> Browser.Document Msg
 view state =
     { body = [ App.UI.render state ]
-    , title = "YouTube Playlist"
+    , title = "Playlist Mixer"
     }
 
 

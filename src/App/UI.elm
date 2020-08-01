@@ -89,7 +89,7 @@ renderHeader state =
             , Font.size 32
             , Font.bold
             ]
-            <| El.text "YouTube Playlist"
+            <| El.text "Playlist Mixer"
         , renderSpacer state
         ]
 
@@ -113,7 +113,7 @@ renderFooter state =
             , El.newTabLink
                 buttonStyle
                 { label = linkLabel "View source on GitHub"
-                , url = "https://github.com/galdiuz/youtube-playlist"
+                , url = "https://github.com/galdiuz/playlist-mixer"
                 }
             , Input.button
                 buttonStyle
@@ -157,7 +157,7 @@ renderWelcomeMessage state =
         El.paragraph
             []
             [ El.text
-                <| "Welcome to YouTube Playlist! This application lets you mix multiple YouTube"
+                <| "Welcome to Playlist Mixer! This application lets you mix multiple YouTube"
                 ++ " playlists together into one, playing them all in one big shuffled list."
             ]
       else
@@ -285,7 +285,7 @@ renderPlaylistMenu state =
                     , El.newTabLink
                         [ Font.underline
                         ]
-                        { label = El.text "YouTube Playlist's privacy policy"
+                        { label = El.text "Playlist Mixer's privacy policy"
                         , url = App.privacyPolicyUrl state
                         }
                     , El.text "."
