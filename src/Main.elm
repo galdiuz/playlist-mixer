@@ -901,13 +901,16 @@ parseTime string =
                     _ ->
                         Err "Invalid time format."
 
-            [ secondString ] ->
-                case String.toInt secondString of
-                    Just seconds ->
-                        Ok <| Just seconds
+            [ _ ] ->
+                if String.length string > 2 then
+                    parseTime <| String.dropRight 2 string ++ ":" ++ String.right 2 string
+                else
+                    case String.toInt string of
+                        Just seconds ->
+                            Ok <| Just seconds
 
-                    Nothing ->
-                        Err "Invalid time format."
+                        Nothing ->
+                            Err "Invalid time format."
 
             _ ->
                 Err "Invalid time format."
