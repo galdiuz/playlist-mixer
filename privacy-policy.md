@@ -6,13 +6,13 @@ account is only ever stored locally in the user's browser, and never sent elsewh
 
 ## Usage of YouTube API scopes
 
-Usage of YouTube's APIs requires sign in to a Google account. Upon sign in the app will ask for
-the following additional authorizations. They are optional, but if granted give additional
-functionality, as described below:
+Playlist Mixer may ask for the following permissions to enhance user functionality:
 
 - **View your YouTube account**  
-If granted the app will use this permission to view the user's private playlists.
+This permission will be asked for when attempting to load playlists from the user's account. If
+granted the app will use this permission to view the user's private playlists.
 
 - **Manage your YouTube account**  
-If granted the app will use this to save notes on the user's playlists, which is used to set
+This permission will be asked for when attempting to edit notes on videos in a playlist. If granted
+the app will use this permission to edit notes on the user's playlists, which is used to set
 start- and end times of videos played in the app.

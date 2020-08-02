@@ -29,7 +29,8 @@ import App exposing (Flags, State)
 import App.Msg as Msg exposing (Msg)
 import App.UI
 import App.Ports as Ports
-import Google
+import Google.OAuth
+import Google.OAuth.Scope
 import Youtube.Api
 import Youtube.PlayerError as PlayerError
 import Youtube.PlayerState as PlayerState
@@ -75,6 +76,7 @@ init flags url navigationKey =
     , oauthResult = oauthResult
     , playlistsByUrl = ""
     , playlistsByChannel = ""
+    , oauthScopes = []
     }
         |> Cmd.Extra.withCmd
             ( case token of
@@ -103,7 +105,7 @@ getToken flags oauthResult =
                             if convertBytes flags.bytes == dataState then
                                 Just
                                     { expires = flags.time + 1000 * Maybe.withDefault 0 data.expiresIn
-                                    , scopes = data.scope
+                                    , scopes = List.filterMap Google.OAuth.Scope.fromString data.scope
                                     , token = data.token
                                     }
                                     |> Maybe.Extra.filter (\t -> t.expires > flags.time)
@@ -189,11 +191,13 @@ updateOAuth msg state =
                     { clientId = state.oauthClientId
                     , redirectUri = state.redirectUri
                     , scope =
-                        [ Google.oauthScopeYoutube
-                        , Google.oauthScopeYoutubeReadOnly
-                        ]
+                        state.oauthScopes
+                            |> List.append
+                                [ Google.OAuth.Scope.OpenId
+                                ]
+                            |> List.map Google.OAuth.Scope.toString
                     , state = Just <| convertBytes bytes
-                    , url = Google.oauthUrl
+                    , url = Google.OAuth.url
                     }
             in
             state
@@ -204,8 +208,10 @@ updateOAuth msg state =
                         |> Ports.openPopup
                     )
 
-        Msg.SignIn ->
-            state
+        Msg.SignIn scopes ->
+            { state
+                | oauthScopes = scopes
+            }
                 |> Cmd.Extra.withCmd (Ports.generateRandomBytes 16)
 
 

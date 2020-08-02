@@ -24,7 +24,8 @@ import String.Format
 
 import App exposing (State)
 import App.Msg as Msg exposing (Msg)
-import Google
+import Google.OAuth
+import Google.OAuth.Scope
 import Youtube.Playlist as Playlist
 import Youtube.Video as Video
 
@@ -107,7 +108,7 @@ renderFooter state =
             ]
             [ El.newTabLink
                 buttonStyle
-                { label = linkLabel "Privacy policy"
+                { label = linkLabel "View privacy policy"
                 , url = App.privacyPolicyUrl state
                 }
             , El.newTabLink
@@ -199,11 +200,42 @@ renderPlaylistMenu state =
                         [ Font.size 24
                         ]
                         <| El.text "Load playlists from your YouTube account"
-                    , Input.button
-                        buttonStyle
-                        { onPress = Just <| Msg.PlaylistList <| Msg.GetUserPlaylists
-                        , label = El.text "Load"
-                        }
+                    , if Google.OAuth.tokenHasReadScope state.token then
+                        Input.button
+                            buttonStyle
+                            { onPress = Just <| Msg.PlaylistList <| Msg.GetUserPlaylists
+                            , label = El.text "Load"
+                            }
+                      else
+                        El.column
+                            [ El.spacing 10
+                            ]
+                            [ El.paragraph
+                                []
+                                [ El.text
+                                    <| "Playlist Mixer needs permission to view your YouTube"
+                                    ++ " account in order to fetch your playlists. Any data fetched"
+                                    ++ " from your account is only stored locally in your browser."
+                                    ++ " For more information, refer to "
+                                , El.newTabLink
+                                    [ Font.underline
+                                    ]
+                                    { label = El.text "Playlist Mixer's privacy policy"
+                                    , url = App.privacyPolicyUrl state
+                                    }
+                                , El.text "."
+                                ]
+                            , Input.button
+                                buttonStyle
+                                { onPress =
+                                    [ Google.OAuth.Scope.YoutubeReadOnly
+                                    ]
+                                        |> Msg.SignIn
+                                        |> Msg.OAuth
+                                        |> Just
+                                , label = linkLabel "Sign in and authorize"
+                                }
+                            ]
                     ]
                 , El.column
                     [ El.spacing 10
@@ -278,9 +310,8 @@ renderPlaylistMenu state =
                 [ El.paragraph
                     []
                     [ El.text
-                        <| "Usage of YouTube's APIs requires sign in to a Google account. Allowing"
-                        ++ " the app to read or manage your YouTube account is optional, and is only"
-                        ++ " required if you want to access your private playlists. For more"
+                        <| "Fetching playlists from YouTube's APIs requires sign in to a Google"
+                        ++ " account. Playlist Mixer does not collect any personal data. For more"
                         ++ " information, refer to "
                     , El.newTabLink
                         [ Font.underline
@@ -292,8 +323,8 @@ renderPlaylistMenu state =
                     ]
                 , Input.button
                     buttonStyle
-                    { onPress = Just <| Msg.OAuth <| Msg.SignIn
-                    , label = El.text "Sign in"
+                    { onPress = Just <| Msg.OAuth <| Msg.SignIn []
+                    , label = linkLabel "Sign in"
                     }
                 ]
         ]
@@ -514,9 +545,10 @@ renderVideoList state =
             , El.width El.fill
             ]
             [ El.column
-                [ El.spacing 15
+                [ El.spacing 10
                 , El.padding 5
                 ]
+                <| List.intersperse (renderSpacer state)
                 <| List.map
                     (renderVideoListItem state)
                     (Dict.toList state.videos)
@@ -534,7 +566,7 @@ renderVideoListItem state (index, listItem) =
             <| El.text <| String.fromInt (index + 1) ++ "."
         , El.column
             [ El.width El.fill
-            , El.spacing 5
+            , El.spacing 10
             ]
             [ El.paragraph
                 []
@@ -565,7 +597,7 @@ renderVideoListItem state (index, listItem) =
                     }
                 ]
             , if listItem.editOpen then
-                if Google.tokenHasWriteScope state.token then
+                if Google.OAuth.tokenHasWriteScope state.token then
                     El.column
                         [ El.spacing 10
                         ]
@@ -610,15 +642,35 @@ renderVideoListItem state (index, listItem) =
                             ]
                         ]
                 else
-                    El.row
+                    El.column
                         [ El.spacing 10
                         ]
-                        [ El.text "Not signed in / not authorized"
-                        , Input.button
-                                buttonStyle
-                                { onPress = Just <| Msg.OAuth <| Msg.SignIn
-                                , label = El.text "Sign in"
+                        [ El.paragraph
+                            []
+                            [ El.text
+                                <| "Playlist Mixer needs permission to manage your YouTube account"
+                                ++ " in order to save notes on your playlists. Playlist Mixer will"
+                                ++ " never use this permission to do anything other than editing"
+                                ++ " your playlists, and never without user input from you. For"
+                                ++ " more information, refer to "
+                            , El.newTabLink
+                                [ Font.underline
+                                ]
+                                { label = El.text "Playlist Mixer's privacy policy"
+                                , url = App.privacyPolicyUrl state
                                 }
+                            , El.text "."
+                            ]
+                        , Input.button
+                            buttonStyle
+                            { onPress =
+                                [ Google.OAuth.Scope.Youtube
+                                ]
+                                    |> Msg.SignIn
+                                    |> Msg.OAuth
+                                    |> Just
+                            , label = linkLabel "Sign in and authorize"
+                            }
                         ]
               else
                 El.none

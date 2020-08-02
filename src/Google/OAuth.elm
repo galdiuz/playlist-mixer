@@ -1,17 +1,17 @@
-module Google exposing
-    ( oauthUrl
-    , oauthScopeYoutube
-    , oauthScopeYoutubeReadOnly
+module Google.OAuth exposing
+    ( url
+    , tokenHasReadScope
     , tokenHasWriteScope
     )
 
 import Url exposing (Url)
 
 import App
+import Google.OAuth.Scope
 
 
-oauthUrl : Url
-oauthUrl =
+url : Url
+url =
     { emptyUrl
         | host = "accounts.google.com"
         , path = "/o/oauth2/v2/auth"
@@ -29,21 +29,22 @@ emptyUrl =
     }
 
 
-oauthScopeYoutube : String
-oauthScopeYoutube =
-    "https://www.googleapis.com/auth/youtube"
+tokenHasReadScope : Maybe App.Token -> Bool
+tokenHasReadScope maybeToken =
+    case maybeToken of
+        Just token ->
+            List.member Google.OAuth.Scope.Youtube token.scopes
+                || List.member Google.OAuth.Scope.YoutubeReadOnly token.scopes
 
-
-oauthScopeYoutubeReadOnly : String
-oauthScopeYoutubeReadOnly =
-    "https://www.googleapis.com/auth/youtube.readonly"
+        Nothing ->
+            False
 
 
 tokenHasWriteScope : Maybe App.Token -> Bool
 tokenHasWriteScope maybeToken =
     case maybeToken of
         Just token ->
-            List.member oauthScopeYoutube token.scopes
+            List.member Google.OAuth.Scope.Youtube token.scopes
 
         Nothing ->
             False

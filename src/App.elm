@@ -20,6 +20,7 @@ import Json.Decode as Decode
 import Json.Decode.Field as Field
 import Json.Encode as Encode
 
+import Google.OAuth.Scope exposing (Scope)
 import Youtube.Playlist as Playlist exposing (Playlist)
 import Youtube.Video as Video exposing (Video)
 
@@ -53,6 +54,7 @@ type alias State =
     , oauthResult : OAuth.AuthorizationResult
     , playlistsByUrl : String
     , playlistsByChannel : String
+    , oauthScopes : List Scope
     }
 
 
@@ -72,7 +74,7 @@ type alias StorageValue =
 
 type alias Token =
     { expires : Int
-    , scopes : List String
+    , scopes : List Scope
     , token : OAuth.Token
     }
 
@@ -170,7 +172,7 @@ encodeToken : Token -> Encode.Value
 encodeToken token =
     Encode.object
         [ ( "expires", Encode.int token.expires )
-        , ( "scopes", Encode.list Encode.string token.scopes )
+        , ( "scopes", Encode.list Encode.string <| List.map Google.OAuth.Scope.toString token.scopes )
         , ( "token", Encode.string <| OAuth.tokenToString token.token )
         ]
 
@@ -178,7 +180,7 @@ encodeToken token =
 decodeToken : Decode.Decoder Token
 decodeToken =
     Field.require "token" Decode.string <| \token ->
-    Field.require "scopes" (Decode.list Decode.string) <| \scopes ->
+    Field.require "scopes" (Decode.list Google.OAuth.Scope.decoder) <| \scopes ->
     Field.require "expires" Decode.int <| \expires ->
     case OAuth.tokenFromString token of
         Just t ->

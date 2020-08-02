@@ -12,6 +12,7 @@ import Json.Encode as Encode
 import Time
 
 import App
+import Google.OAuth.Scope exposing (Scope)
 import Youtube.Page exposing (Page)
 import Youtube.Playlist exposing (Playlist)
 import Youtube.Video exposing (Video)
@@ -30,7 +31,7 @@ type Msg
 
 type OAuthMsg
     = ReceiveRandomBytes (List Int)
-    | SignIn
+    | SignIn (List Scope)
 
 
 type PlayerMsg
