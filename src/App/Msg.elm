@@ -20,6 +20,7 @@ import Youtube.Video exposing (Video)
 
 type Msg
     = NoOp
+    | SetAutoplay Bool
     | SetTime Time.Posix
     | SetTheme App.Theme
     | OAuth OAuthMsg

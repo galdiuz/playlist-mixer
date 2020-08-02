@@ -57,6 +57,7 @@ render state =
                         , renderPlaylistMenu state
                         , renderPlaylistList state
                         , renderMessages state
+                        , renderConfig state
                         , renderFooter state
                         , El.html FontAwesome.Styles.css
                         ]
@@ -100,7 +101,7 @@ renderFooter state =
     El.column
         [ El.width El.fill
         , El.paddingEach { paddingZero | bottom = 10 }
-        , El.spacing 10
+        , El.spacing 20
         ]
         [ renderSpacer state
         , El.row
@@ -115,16 +116,6 @@ renderFooter state =
                 buttonStyle
                 { label = linkLabel "View source on GitHub"
                 , url = "https://github.com/galdiuz/playlist-mixer"
-                }
-            , Input.button
-                buttonStyle
-                { label = El.text "Light theme"
-                , onPress = Just <| Msg.SetTheme App.lightTheme
-                }
-            , Input.button
-                buttonStyle
-                { label = El.text "Dark theme"
-                , onPress = Just <| Msg.SetTheme App.darkTheme
                 }
             ]
         ]
@@ -727,6 +718,42 @@ renderMessages state =
             , El.height <| El.maximum 200 El.shrink
             ]
             <| List.map El.text state.messages
+
+
+renderConfig : State -> Element Msg
+renderConfig state =
+    El.column
+        [ El.width El.fill
+        , El.spacing 10
+        ]
+        [ renderSpacer state
+        , El.el
+            [ Font.size 24
+            , El.paddingEach { paddingZero | top = 10 }
+            ]
+            <| El.text "Configuration"
+        , El.row
+            [ El.spacing 10
+            ]
+            [ Input.button
+                buttonStyle
+                { label = El.text "Light theme"
+                , onPress = Just <| Msg.SetTheme App.lightTheme
+                }
+            , Input.button
+                buttonStyle
+                { label = El.text "Dark theme"
+                , onPress = Just <| Msg.SetTheme App.darkTheme
+                }
+            ]
+        , Input.checkbox
+            []
+            { checked = state.autoplay
+            , icon = Input.defaultCheckbox
+            , label = Input.labelRight [] <| El.text "Automatically play next video"
+            , onChange = Msg.SetAutoplay
+            }
+        ]
 
 
 maybeAttribute : Maybe a -> El.Attribute msg -> El.Attribute msg

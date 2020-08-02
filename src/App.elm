@@ -55,6 +55,7 @@ type alias State =
     , playlistsByUrl : String
     , playlistsByChannel : String
     , oauthScopes : List Scope
+    , autoplay : Bool
     }
 
 

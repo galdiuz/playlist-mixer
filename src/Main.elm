@@ -77,6 +77,7 @@ init flags url navigationKey =
     , playlistsByUrl = ""
     , playlistsByChannel = ""
     , oauthScopes = []
+    , autoplay = True
     }
         |> Cmd.Extra.withCmd
             ( case token of
@@ -154,6 +155,12 @@ update msg state =
         Msg.NoOp ->
             Cmd.Extra.withNoCmd state
 
+        Msg.SetAutoplay autoplay ->
+            { state
+                | autoplay = autoplay
+            }
+                |> Cmd.Extra.withNoCmd
+
         Msg.SetTime time ->
             { state
                 | time = Time.posixToMillis time
@@ -219,12 +226,7 @@ updatePlayer : Msg.PlayerMsg -> State -> ( State, Cmd Msg )
 updatePlayer msg state =
     case msg of
         Msg.PlayNext ->
-            { state
-                | current = App.nextIndex state
-            }
-                |> playCurrentVideo
-                |> Cmd.Extra.andThen saveListToStorage
-                |> Cmd.Extra.andThen scrollToCurrent
+            playNextVideo state
 
         Msg.PlayPrevious ->
             { state
@@ -238,21 +240,17 @@ updatePlayer msg state =
             case Decode.decodeValue (Decode.field "data" PlayerError.decoder) value of
                 Ok PlayerError.NotFound ->
                     -- TODO: Log error
-                    { state
-                        | current = App.nextIndex state
-                    }
-                        |> playCurrentVideo
-                        |> Cmd.Extra.andThen scrollToCurrent
-                        |> Cmd.Extra.andThen saveListToStorage
+                    if state.autoplay then
+                        playNextVideo state
+                    else
+                        Cmd.Extra.withNoCmd state
 
                 Ok PlayerError.NoEmbed ->
                     -- TODO: Log error
-                    { state
-                        | current = App.nextIndex state
-                    }
-                        |> playCurrentVideo
-                        |> Cmd.Extra.andThen scrollToCurrent
-                        |> Cmd.Extra.andThen saveListToStorage
+                    if state.autoplay then
+                        playNextVideo state
+                    else
+                        Cmd.Extra.withNoCmd state
 
                 _ ->
                     Cmd.Extra.withNoCmd state
@@ -263,16 +261,13 @@ updatePlayer msg state =
         Msg.PlayerStateChange value ->
             case Decode.decodeValue (Decode.field "data" PlayerState.decoder) value of
                 Ok PlayerState.Ended ->
-                    { state
-                        | current = App.nextIndex state
-                    }
-                        |> playCurrentVideo
-                        |> Cmd.Extra.andThen scrollToCurrent
-                        |> Cmd.Extra.andThen saveListToStorage
+                    if state.autoplay then
+                        playNextVideo state
+                    else
+                        Cmd.Extra.withNoCmd state
 
                 _ ->
-                    state
-                        |> Cmd.Extra.withNoCmd
+                    Cmd.Extra.withNoCmd state
 
         Msg.YouTubeApiReady ->
             { state
@@ -1001,6 +996,16 @@ playCurrentVideo state =
         Nothing ->
             state
                 |> Cmd.Extra.withNoCmd
+
+
+playNextVideo : State -> ( State, Cmd Msg )
+playNextVideo state =
+    { state
+        | current = App.nextIndex state
+    }
+        |> playCurrentVideo
+        |> Cmd.Extra.andThen saveListToStorage
+        |> Cmd.Extra.andThen scrollToCurrent
 
 
 convertBytes : List Int -> String
