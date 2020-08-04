@@ -199,33 +199,11 @@ renderPlaylistMenu state =
                         ]
                         <| El.text "Load playlists from your YouTube account"
                     , if Google.OAuth.tokenHasReadScope state.token then
-                        El.column
-                            [ El.spacing 10
-                            ]
-                            [ El.row
-                                [ El.spacing 5
-                                ]
-                                [ El.paragraph
-                                    []
-                                    [ El.text "Signed in as "
-                                    , El.text
-                                        (state.token
-                                            |> Maybe.andThen .email
-                                            |> Maybe.withDefault ""
-                                        )
-                                    ]
-                                , Input.button
-                                    buttonStyle
-                                    { onPress = Just <| Msg.OAuth <| Msg.SignOut
-                                    , label = El.text "Sign out"
-                                    }
-                                ]
-                            , Input.button
-                                buttonStyle
-                                { onPress = Just <| Msg.PlaylistList <| Msg.GetUserPlaylists
-                                , label = El.text "Load"
-                                }
-                            ]
+                        Input.button
+                            buttonStyle
+                            { onPress = Just <| Msg.PlaylistList <| Msg.GetUserPlaylists
+                            , label = El.text "Load"
+                            }
                       else
                         El.column
                             [ El.spacing 10
@@ -783,6 +761,23 @@ renderConfig state =
             , label = Input.labelRight [] <| El.text "Automatically play next video"
             , onChange = Msg.SetAutoplay
             }
+        , case Maybe.andThen .email state.token of
+            Just email ->
+                El.row
+                    [ El.spacing 5
+                    ]
+                    [ El.paragraph
+                        []
+                        [ El.text <| "Signed in as " ++ email
+                        ]
+                    , Input.button
+                        buttonStyle
+                        { onPress = Just <| Msg.OAuth <| Msg.SignOut
+                        , label = El.text "Sign out"
+                        }
+                    ]
+            Nothing ->
+                El.none
         ]
 
 
