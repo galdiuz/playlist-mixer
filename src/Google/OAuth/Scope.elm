@@ -9,7 +9,8 @@ import Json.Decode as Decode
 
 
 type Scope
-    = OpenId
+    = Email
+    | OpenId
     | Youtube
     | YoutubeReadOnly
 
@@ -31,6 +32,9 @@ decoder =
 fromString : String -> Maybe Scope
 fromString string =
     case string of
+        "email" ->
+            Just Email
+
         "openid" ->
             Just OpenId
 
@@ -47,6 +51,9 @@ fromString string =
 toString : Scope -> String
 toString scope =
     case scope of
+        Email ->
+            "email"
+
         OpenId ->
             "openid"
 

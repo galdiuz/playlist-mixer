@@ -105,7 +105,8 @@ getToken flags oauthResult =
                         (\dataState ->
                             if convertBytes flags.bytes == dataState then
                                 Just
-                                    { expires = flags.time + 1000 * Maybe.withDefault 0 data.expiresIn
+                                    { email = Nothing
+                                    , expires = flags.time + 1000 * Maybe.withDefault 0 data.expiresIn
                                     , scopes = List.filterMap Google.OAuth.Scope.fromString data.scope
                                     , token = data.token
                                     }
@@ -192,6 +193,28 @@ update msg state =
 updateOAuth : Msg.OAuthMsg -> State -> ( State, Cmd Msg )
 updateOAuth msg state =
     case msg of
+        Msg.GetUserEmailResult result ->
+            case (result, state.token) of
+                (Ok email, Just token) ->
+                    let
+                        newToken =
+                            { token
+                                | email = Just email
+                            }
+                    in
+                    { state
+                        | token = Just newToken
+                    }
+                        |> Cmd.Extra.withCmd
+                            (Ports.saveToStorage
+                                { key = state.tokenStorageKey
+                                , value = App.encodeToken newToken
+                                }
+                            )
+
+                _ ->
+                    Cmd.Extra.withNoCmd state
+
         Msg.ReceiveRandomBytes bytes ->
             let
                 authorization =
@@ -200,7 +223,7 @@ updateOAuth msg state =
                     , scope =
                         state.oauthScopes
                             |> List.append
-                                [ Google.OAuth.Scope.OpenId
+                                [ Google.OAuth.Scope.Email
                                 ]
                             |> List.map Google.OAuth.Scope.toString
                     , state = Just <| convertBytes bytes
@@ -220,6 +243,10 @@ updateOAuth msg state =
                 | oauthScopes = scopes
             }
                 |> Cmd.Extra.withCmd (Ports.generateRandomBytes 16)
+
+        Msg.SignOut ->
+            state
+                |> Cmd.Extra.withCmd (Ports.removeFromStorage state.tokenStorageKey)
 
 
 updatePlayer : Msg.PlayerMsg -> State -> ( State, Cmd Msg )
@@ -590,14 +617,27 @@ updateStorage msg state =
 
         Msg.StorageChanged { key, value } ->
             if key == state.tokenStorageKey then
-                { state
-                    | token =
+                let
+                    token =
                         value
                             |> Decode.decodeValue App.decodeToken
                             |> Result.toMaybe
                             |> Maybe.Extra.filter (\t -> t.expires > state.time)
+                in
+                { state
+                    | token = token
                 }
                     |> Cmd.Extra.withCmd (Ports.closePopup ())
+                    |> Cmd.Extra.addCmd
+                        (case Maybe.map .email token of
+                            Just Nothing ->
+                                Youtube.Api.getUserEmail
+                                    token
+                                    (Msg.OAuth << Msg.GetUserEmailResult)
+
+                            _ ->
+                                Cmd.none
+                        )
 
             else if key == state.playlistStorageKey then
                 { state
@@ -953,9 +993,7 @@ validateTimes maybeStartAt maybeEndAt =
 
 saveListToStorage : State -> ( State, Cmd msg )
 saveListToStorage state =
-    { state
-        | playlistInStorage = True
-    }
+    state
         |> Cmd.Extra.withCmd
             ( Ports.saveToStorage
                 { key = state.playlistStorageKey

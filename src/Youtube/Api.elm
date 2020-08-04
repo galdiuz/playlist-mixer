@@ -1,5 +1,6 @@
 module Youtube.Api exposing
-    ( getUserPlaylists
+    ( getUserEmail
+    , getUserPlaylists
     , getPlaylistVideos
     , getPlaylistsByChannel
     , getPlaylistsByIds
@@ -70,6 +71,28 @@ put { body, expect, token, url } =
         , timeout = Nothing
         , tracker = Nothing
         }
+
+
+getUserEmail :
+    Maybe App.Token
+    -> (Result Http.Error String -> msg)
+    -> Cmd msg
+getUserEmail oauthToken toMsg =
+    get
+        { url = userInfoUrl
+        , expect = Http.expectJson toMsg userEmailDecoder
+        , token = oauthToken
+        }
+
+
+userEmailDecoder : Decode.Decoder String
+userEmailDecoder =
+    Decode.field "email" Decode.string
+
+
+userInfoUrl : String
+userInfoUrl =
+    "https://openidconnect.googleapis.com/v1/userinfo"
 
 
 getUserPlaylists :

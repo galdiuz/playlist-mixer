@@ -21,6 +21,7 @@ import Maybe.Extra
 import OAuth
 import OAuth.Implicit as OAuth
 import String.Format
+import Url.Builder
 
 import App exposing (State)
 import App.Msg as Msg exposing (Msg)
@@ -84,14 +85,20 @@ render state =
 renderHeader : State -> Element msg
 renderHeader state =
     El.column
-        [ El.width El.fill
+        [ El.paddingEach { paddingZero | top = 30 }
+        , El.spacing 10
+        , El.width El.fill
         ]
-        [ El.el
-            [ El.paddingEach { paddingZero | top = 30, bottom = 10 }
-            , Font.size 32
-            , Font.bold
+        [ El.row
+            [ El.width El.fill
             ]
-            <| El.text "Playlist Mixer"
+            [ El.el
+                [ Font.bold
+                , Font.size 32
+                ]
+                <| El.text "Playlist Mixer"
+            , renderDevelopedWithYoutube state
+            ]
         , renderSpacer state
         ]
 
@@ -192,11 +199,33 @@ renderPlaylistMenu state =
                         ]
                         <| El.text "Load playlists from your YouTube account"
                     , if Google.OAuth.tokenHasReadScope state.token then
-                        Input.button
-                            buttonStyle
-                            { onPress = Just <| Msg.PlaylistList <| Msg.GetUserPlaylists
-                            , label = El.text "Load"
-                            }
+                        El.column
+                            [ El.spacing 10
+                            ]
+                            [ El.row
+                                [ El.spacing 5
+                                ]
+                                [ El.paragraph
+                                    []
+                                    [ El.text "Signed in as "
+                                    , El.text
+                                        (state.token
+                                            |> Maybe.andThen .email
+                                            |> Maybe.withDefault ""
+                                        )
+                                    ]
+                                , Input.button
+                                    buttonStyle
+                                    { onPress = Just <| Msg.OAuth <| Msg.SignOut
+                                    , label = El.text "Sign out"
+                                    }
+                                ]
+                            , Input.button
+                                buttonStyle
+                                { onPress = Just <| Msg.PlaylistList <| Msg.GetUserPlaylists
+                                , label = El.text "Load"
+                                }
+                            ]
                       else
                         El.column
                             [ El.spacing 10
@@ -204,10 +233,11 @@ renderPlaylistMenu state =
                             [ El.paragraph
                                 []
                                 [ El.text
-                                    <| "Playlist Mixer needs permission to view your YouTube"
-                                    ++ " account in order to fetch your playlists. Any data fetched"
-                                    ++ " from your account is only stored locally in your browser."
-                                    ++ " For more information, refer to "
+                                    <| "To fetch playlists from your YouTube account Playlist Mixer"
+
+                                    ++ " needs permission to view your YouTube account. Any data"
+                                    ++ " fetched from your account will only be stored locally in"
+                                    ++ " your browser. For more information, refer to "
                                 , El.newTabLink
                                     [ Font.underline
                                     ]
@@ -217,14 +247,14 @@ renderPlaylistMenu state =
                                 , El.text "."
                                 ]
                             , Input.button
-                                buttonStyle
+                                []
                                 { onPress =
                                     [ Google.OAuth.Scope.YoutubeReadOnly
                                     ]
                                         |> Msg.SignIn
                                         |> Msg.OAuth
                                         |> Just
-                                , label = linkLabel "Sign in and authorize"
+                                , label = renderSignInButton
                                 }
                             ]
                     ]
@@ -301,9 +331,10 @@ renderPlaylistMenu state =
                 [ El.paragraph
                     []
                     [ El.text
-                        <| "Fetching playlists from YouTube's APIs requires sign in to a Google"
-                        ++ " account. Playlist Mixer does not collect any personal data. For more"
-                        ++ " information, refer to "
+                        <| "Fetching playlists from YouTube's APIs requires you to be signed in to"
+
+                        ++ " a Google  account. Playlist Mixer does not collect any personal data."
+                        ++ " For more information, refer to "
                     , El.newTabLink
                         [ Font.underline
                         ]
@@ -313,9 +344,9 @@ renderPlaylistMenu state =
                     , El.text "."
                     ]
                 , Input.button
-                    buttonStyle
+                    []
                     { onPress = Just <| Msg.OAuth <| Msg.SignIn []
-                    , label = linkLabel "Sign in"
+                    , label = renderSignInButton
                     }
                 ]
         ]
@@ -639,11 +670,10 @@ renderVideoListItem state (index, listItem) =
                         [ El.paragraph
                             []
                             [ El.text
-                                <| "Playlist Mixer needs permission to manage your YouTube account"
-                                ++ " in order to save notes on your playlists. Playlist Mixer will"
-                                ++ " never use this permission to do anything other than editing"
-                                ++ " your playlists, and never without user input from you. For"
-                                ++ " more information, refer to "
+                                <| "To save notes on your playlist Playlist Mixer needs permission"
+                                ++ " to manage your YouTube account. Playlist Mixer will only use"
+                                ++ " this permission for this purpose and nothing else. For more"
+                                ++ " information, refer to "
                             , El.newTabLink
                                 [ Font.underline
                                 ]
@@ -653,14 +683,14 @@ renderVideoListItem state (index, listItem) =
                             , El.text "."
                             ]
                         , Input.button
-                            buttonStyle
+                            []
                             { onPress =
                                 [ Google.OAuth.Scope.Youtube
                                 ]
                                     |> Msg.SignIn
                                     |> Msg.OAuth
                                     |> Just
-                            , label = linkLabel "Sign in and authorize"
+                            , label = renderSignInButton
                             }
                         ]
               else
@@ -780,6 +810,38 @@ disabledButtonStyle state =
         , Border.color state.theme.disabled
         , Font.color state.theme.disabled
         ]
+
+
+renderSignInButton : Element msg
+renderSignInButton =
+    El.image
+        []
+        { description = "Sign in with Google"
+        , src =
+            Url.Builder.relative
+                [ "media/btn_google_signin_dark_normal_web.png" ]
+                []
+        }
+
+
+renderDevelopedWithYoutube : State -> Element msg
+renderDevelopedWithYoutube state =
+    let
+        mask =
+            "url(media/developed-with-youtube.svg)"
+    in
+    El.el
+        [ Background.color <| state.theme.fg
+        , El.alignRight
+        , El.height <| El.minimum 30 El.shrink
+        , El.htmlAttribute <| HA.style "-webkit-mask" mask
+        , El.htmlAttribute <| HA.style "-webkit-mask-size" "contain"
+        , El.htmlAttribute <| HA.style "mask" mask
+        , El.htmlAttribute <| HA.style "mask-size" "contain"
+        , El.width <| El.minimum 243 El.shrink
+        ]
+        El.none
+
 
 
 paddingZero : { top : Int, bottom : Int, left : Int, right : Int }

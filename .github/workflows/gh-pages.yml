@@ -34,7 +34,7 @@ jobs:
       - name: Move files
         run: |
           mkdir ./build
-          mv ./index.html ./app-${{ github.sha }}.js ./privacy-policy.md ./build/
+          mv ./index.html ./app-${{ github.sha }}.js ./privacy-policy.md ./media ./build/
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3

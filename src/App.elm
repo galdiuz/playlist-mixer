@@ -19,6 +19,7 @@ import Url.Builder
 import Json.Decode as Decode
 import Json.Decode.Field as Field
 import Json.Encode as Encode
+import Json.Encode.Extra as Encode
 
 import Google.OAuth.Scope exposing (Scope)
 import Youtube.Playlist as Playlist exposing (Playlist)
@@ -74,7 +75,8 @@ type alias StorageValue =
 
 
 type alias Token =
-    { expires : Int
+    { email : Maybe String
+    , expires : Int
     , scopes : List Scope
     , token : OAuth.Token
     }
@@ -172,7 +174,8 @@ decodePlaylist =
 encodeToken : Token -> Encode.Value
 encodeToken token =
     Encode.object
-        [ ( "expires", Encode.int token.expires )
+        [ ( "email", Encode.maybe Encode.string token.email )
+        , ( "expires", Encode.int token.expires )
         , ( "scopes", Encode.list Encode.string <| List.map Google.OAuth.Scope.toString token.scopes )
         , ( "token", Encode.string <| OAuth.tokenToString token.token )
         ]
@@ -180,13 +183,15 @@ encodeToken token =
 
 decodeToken : Decode.Decoder Token
 decodeToken =
-    Field.require "token" Decode.string <| \token ->
-    Field.require "scopes" (Decode.list Google.OAuth.Scope.decoder) <| \scopes ->
+    Field.require "email" (Decode.maybe Decode.string) <| \email ->
     Field.require "expires" Decode.int <| \expires ->
+    Field.require "scopes" (Decode.list Google.OAuth.Scope.decoder) <| \scopes ->
+    Field.require "token" Decode.string <| \token ->
     case OAuth.tokenFromString token of
         Just t ->
             Decode.succeed
-                { expires = expires
+                { email = email
+                , expires = expires
                 , scopes = scopes
                 , token = t
                 }

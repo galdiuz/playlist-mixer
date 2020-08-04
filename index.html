@@ -91,6 +91,10 @@
                 data.key,
                 JSON.stringify(data.value)
             );
+            app.ports && app.ports.storageChanged && app.ports.storageChanged.send({
+                key: data.key,
+                value: data.value,
+            });
         });
 
         app.ports && app.ports.loadFromStorage && app.ports.loadFromStorage.subscribe(key => {
@@ -105,6 +109,7 @@
 
         app.ports && app.ports.removeFromStorage && app.ports.removeFromStorage.subscribe(key => {
             localStorage.removeItem(key);
+            app.ports && app.ports.storageDeleted && app.ports.storageDeleted.send(key);
         });
 
         app.ports && app.ports.generateRandomBytes && app.ports.generateRandomBytes.subscribe(n => {

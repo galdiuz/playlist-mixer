@@ -31,8 +31,10 @@ type Msg
 
 
 type OAuthMsg
-    = ReceiveRandomBytes (List Int)
+    = GetUserEmailResult (Result Http.Error String)
+    | ReceiveRandomBytes (List Int)
     | SignIn (List Scope)
+    | SignOut
 
 
 type PlayerMsg
