@@ -1,9 +1,9 @@
-# YouTube Playlist
+# Playlist Mixer
 
-YouTube Playlist is a client-side web application written in Elm that lets you shuffle multiple
+Playlist Mixer is a client-side web application written in Elm that lets you shuffle multiple
 YouTube playlists together into a single big list and then play them in an embedded YouTube player.
 
-[Try it here!](https://galdiuz.github.io/youtube-playlist)
+[Try it here!](https://galdiuz.github.io/playlist-mixer)
 
 
 ## Purpose of the app
