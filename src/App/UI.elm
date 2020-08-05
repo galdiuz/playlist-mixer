@@ -27,6 +27,7 @@ import App exposing (State)
 import App.Msg as Msg exposing (Msg)
 import Google.OAuth
 import Google.OAuth.Scope
+import Youtube.PlayerError exposing (PlayerError)
 import Youtube.Playlist as Playlist
 import Youtube.Video as Video
 
@@ -560,6 +561,7 @@ renderVideoListItem state (index, listItem) =
     El.row
         [ El.spacing 5
         , El.htmlAttribute <| HA.id <| playlistVideoId index
+        , El.width El.fill
         ]
         [ El.el
             [ El.alignTop ]
@@ -673,6 +675,18 @@ renderVideoListItem state (index, listItem) =
                         ]
               else
                 El.none
+            , case listItem.error of
+                Just error ->
+                    El.paragraph
+                        [ Border.width 1
+                        , Border.color <| state.theme.error
+                        , El.padding 2
+                        ]
+                        [ El.text "Error playing video: "
+                        , El.text <| Youtube.PlayerError.description error
+                        ]
+                Nothing ->
+                    El.none
             ]
         ]
 

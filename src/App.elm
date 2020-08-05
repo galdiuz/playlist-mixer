@@ -22,6 +22,7 @@ import Json.Encode as Encode
 import Json.Encode.Extra as Encode
 
 import Google.OAuth.Scope exposing (Scope)
+import Youtube.PlayerError exposing (PlayerError)
 import Youtube.Playlist as Playlist exposing (Playlist)
 import Youtube.Video as Video exposing (Video)
 
@@ -96,14 +97,15 @@ type alias PlaylistListItem =
 
 
 type alias VideoListItem =
-    { video : Video
+    { editOpen : Bool
+    , endAt : String
+    , endAtError : Maybe String
+    , error : Maybe PlayerError
+    , note : String
     , playlist : Playlist
     , startAt : String
     , startAtError : Maybe String
-    , endAt : String
-    , endAtError : Maybe String
-    , note : String
-    , editOpen : Bool
+    , video : Video
     }
 
 
@@ -127,14 +129,15 @@ darkTheme =
 
 makeVideoListItem : Playlist -> Video -> VideoListItem
 makeVideoListItem playlist video =
-    { video = video
+    { editOpen = False
+    , endAt = ""
+    , endAtError = Nothing
+    , error = Nothing
+    , note = ""
     , playlist = playlist
     , startAt = ""
     , startAtError = Nothing
-    , endAt = ""
-    , endAtError = Nothing
-    , note = ""
-    , editOpen = False
+    , video = video
     }
 
 

@@ -265,19 +265,25 @@ updatePlayer msg state =
 
         Msg.PlayerError value ->
             case Decode.decodeValue (Decode.field "data" PlayerError.decoder) value of
-                Ok PlayerError.NotFound ->
-                    -- TODO: Log error
-                    if state.autoplay then
-                        playNextVideo state
-                    else
-                        Cmd.Extra.withNoCmd state
-
-                Ok PlayerError.NoEmbed ->
-                    -- TODO: Log error
-                    if state.autoplay then
-                        playNextVideo state
-                    else
-                        Cmd.Extra.withNoCmd state
+                Ok error ->
+                    { state
+                        | videos =
+                            Dict.update
+                                state.current
+                                (Maybe.map
+                                    (\listItem ->
+                                        { listItem
+                                            | error = Just error
+                                        }
+                                    )
+                                )
+                                state.videos
+                    }
+                        |> (if state.autoplay then
+                                playNextVideo
+                            else
+                                Cmd.Extra.withNoCmd
+                           )
 
                 _ ->
                     Cmd.Extra.withNoCmd state
@@ -728,7 +734,7 @@ updateVideoList msg state =
                         | videos =
                             Dict.update
                                 index
-                                ( Maybe.map
+                                (Maybe.map
                                     (\listItem ->
                                         { listItem
                                             | video = video

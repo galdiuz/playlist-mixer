@@ -1,6 +1,7 @@
 module Youtube.PlayerError exposing
     ( PlayerError(..)
     , decoder
+    , description
     , mapPlayerError
     )
 
@@ -12,6 +13,22 @@ type PlayerError
     | Html5Error
     | NotFound
     | NoEmbed
+
+
+description : PlayerError -> String
+description error =
+    case error of
+        InvalidParam ->
+            "Invalid parameter value."
+
+        Html5Error ->
+            "HTML5 error."
+
+        NotFound ->
+            "Video not found. It may be deleted, set to private, or copyright blocked."
+
+        NoEmbed ->
+            "The video owner does not allow the video to be played in embedded players."
 
 
 mapPlayerError : Int -> Maybe PlayerError
