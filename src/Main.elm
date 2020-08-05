@@ -51,7 +51,7 @@ main =
 
 
 init : Flags -> Url -> Navigation.Key -> ( State, Cmd Msg )
-init flags url navigationKey =
+init flags url _ =
     let
         oauthResult =
             OAuth.parseToken url
@@ -59,25 +59,24 @@ init flags url navigationKey =
         token =
             getToken flags oauthResult
     in
-    { navigationKey = navigationKey
+    { autoplay = True
+    , currentVideoIndex = 0
+    , messages = []
+    , oauthClientId = flags.oauthClientId
+    , oauthResult = oauthResult
+    , oauthScopes = []
+    , playlistInStorage = flags.playlistInStorage
+    , playlistList = Dict.empty
+    , playlistStorageKey = flags.playlistStorageKey
+    , playlistsByChannelValue = ""
+    , playlistsByUrlValue = ""
     , redirectUri = { url | query = Nothing, fragment = Nothing }
+    , theme = App.darkTheme
     , time = flags.time
     , token = token
-    , lists = Dict.empty
-    , messages = []
-    , videos = Dict.empty
-    , current = 0
-    , playlistInStorage = flags.playlistInStorage
-    , playlistStorageKey = flags.playlistStorageKey
     , tokenStorageKey = flags.tokenStorageKey
-    , oauthClientId = flags.oauthClientId
+    , videoList = Dict.empty
     , youtubeApiReady = False
-    , theme = App.darkTheme
-    , oauthResult = oauthResult
-    , playlistsByUrl = ""
-    , playlistsByChannel = ""
-    , oauthScopes = []
-    , autoplay = True
     }
         |> Cmd.Extra.withCmd
             ( case token of
@@ -131,7 +130,13 @@ getToken flags oauthResult =
 view : State -> Browser.Document Msg
 view state =
     { body = [ App.UI.render state ]
-    , title = "Playlist Mixer"
+    , title =
+        case Dict.get state.currentVideoIndex state.videoList of
+            Just listItem ->
+                "Playlist Mixer - " ++ listItem.video.title
+
+            Nothing ->
+                "Playlist Mixer"
     }
 
 
@@ -257,7 +262,7 @@ updatePlayer msg state =
 
         Msg.PlayPrevious ->
             { state
-                | current = App.previousIndex state
+                | currentVideoIndex = App.previousIndex state
             }
                 |> playCurrentVideo
                 |> Cmd.Extra.andThen saveListToStorage
@@ -267,9 +272,9 @@ updatePlayer msg state =
             case Decode.decodeValue (Decode.field "data" PlayerError.decoder) value of
                 Ok error ->
                     { state
-                        | videos =
+                        | videoList =
                             Dict.update
-                                state.current
+                                state.currentVideoIndex
                                 (Maybe.map
                                     (\listItem ->
                                         { listItem
@@ -277,7 +282,7 @@ updatePlayer msg state =
                                         }
                                     )
                                 )
-                                state.videos
+                                state.videoList
                     }
                         |> (if state.autoplay then
                                 playNextVideo
@@ -314,28 +319,28 @@ updatePlaylistList msg state =
     case msg of
         Msg.AppendPlaylist videos ->
             let
-                videoInList listItem =
-                    state.videos
+                videoIsInList listItem =
+                    state.videoList
                         |> Dict.values
                         |> List.map (.video >> .id)
                         |> List.member listItem.video.id
             in
             { state
-                | videos =
+                | videoList =
                     videos
-                        |> List.filter (not << videoInList)
+                        |> List.filter (not << videoIsInList)
                         |> List.indexedMap Tuple.pair
-                        |> List.map (Tuple.mapFirst ((+) (Dict.size state.videos)))
+                        |> List.map (Tuple.mapFirst ((+) (Dict.size state.videoList)))
                         |> Dict.fromList
-                        |> Dict.union state.videos
-                , lists = Dict.empty
+                        |> Dict.union state.videoList
+                , playlistList = Dict.empty
             }
                 |> saveListToStorage
 
         Msg.GetPlaylistVideos andThen ->
             let
                 playlists =
-                    state.lists
+                    state.playlistList
                         |> Dict.values
                         |> List.filterMap
                             (\listItem ->
@@ -355,7 +360,7 @@ updatePlaylistList msg state =
                         1
                         Nothing
                         { state
-                            | lists = Dict.empty
+                            | playlistList = Dict.empty
                         }
 
                 [] ->
@@ -417,12 +422,6 @@ updatePlaylistList msg state =
 
                         nextPage =
                             pageNo + 1
-
-                        playlistIds =
-                            state.lists
-                                |> Dict.values
-                                |> List.map .playlist
-                                |> List.map .id
                     in
                     if Maybe.Extra.isJust page.nextPageToken then
                         state
@@ -439,7 +438,7 @@ updatePlaylistList msg state =
 
                     else
                         { state
-                            | lists =
+                            | playlistList =
                                 playlists
                                     |> List.map
                                         (\playlist ->
@@ -450,7 +449,7 @@ updatePlaylistList msg state =
                                                 }
                                         )
                                     |> Dict.fromList
-                                    |> Dict.union state.lists
+                                    |> Dict.union state.playlistList
                         }
                             |> appendMessage
                                 ("Fetched {{}} playlists."
@@ -481,13 +480,13 @@ updatePlaylistList msg state =
         Msg.LoadPlaylistsByChannel ->
             let
                 channelId =
-                    state.playlistsByChannel
+                    state.playlistsByChannelValue
                         |> Url.fromString
                         |> Maybe.andThen
                             (Url.Parser.parse
                                 (Url.Parser.s "channel" </> Url.Parser.string)
                             )
-                        |> Maybe.withDefault state.playlistsByChannel
+                        |> Maybe.withDefault state.playlistsByChannelValue
             in
             { state |
                 messages = "Fetching page 1 of channel playlists..." :: state.messages
@@ -503,7 +502,7 @@ updatePlaylistList msg state =
         Msg.LoadPlaylistsByUrl ->
             let
                 playlistIds =
-                    state.playlistsByUrl
+                    state.playlistsByUrlValue
                         |> String.words
                         |> List.map
                             (\string ->
@@ -533,7 +532,7 @@ updatePlaylistList msg state =
 
         Msg.SetChecked key checked ->
             { state
-                | lists =
+                | playlistList =
                     Dict.update
                         key
                         (\maybe ->
@@ -543,53 +542,53 @@ updatePlaylistList msg state =
                                 )
                                 maybe
                         )
-                        state.lists
+                        state.playlistList
             }
                 |> Cmd.Extra.withNoCmd
 
         Msg.SetCheckedAll ->
             { state
-                | lists =
+                | playlistList =
                     Dict.map
                         (\k v ->
                             { v | checked = True }
                         )
-                        state.lists
+                        state.playlistList
             }
                 |> Cmd.Extra.withNoCmd
 
         Msg.SetCheckedNone ->
             { state
-                | lists =
+                | playlistList =
                     Dict.map
                         (\k v ->
                             { v | checked = False }
                         )
-                        state.lists
+                        state.playlistList
             }
                 |> Cmd.Extra.withNoCmd
 
         Msg.SetPlaylist videos ->
             { state
-                | videos =
+                | videoList =
                     videos
                         |> List.indexedMap Tuple.pair
                         |> Dict.fromList
-                , lists = Dict.empty
-                , current = 0
+                , playlistList = Dict.empty
+                , currentVideoIndex = 0
             }
                 |> saveListToStorage
                 |> Cmd.Extra.addCmd (Ports.createPlayer App.UI.playerId)
 
         Msg.SetPlaylistsByChannel string ->
             { state
-                | playlistsByChannel = string
+                | playlistsByChannelValue = string
             }
                 |> Cmd.Extra.withNoCmd
 
         Msg.SetPlaylistsByUrl string ->
             { state
-                | playlistsByUrl = string
+                | playlistsByUrlValue = string
             }
                 |> Cmd.Extra.withNoCmd
 
@@ -602,8 +601,8 @@ updateStorage msg state =
                 case Decode.decodeValue App.decodePlaylist value of
                     Ok playlist ->
                         { state
-                            | current = playlist.current
-                            , videos =
+                            | currentVideoIndex = playlist.current
+                            , videoList =
                                 playlist.items
                                     |> List.indexedMap Tuple.pair
                                     |> Dict.fromList
@@ -675,10 +674,10 @@ updateVideoList : Msg.VideoListMsg -> State -> ( State, Cmd Msg )
 updateVideoList msg state =
     case msg of
         Msg.PlayVideo index ->
-            case Dict.get index state.videos of
+            case Dict.get index state.videoList of
                 Just listItem ->
                     { state
-                        | current = index
+                        | currentVideoIndex = index
                     }
                         |> playCurrentVideo
                         |> Cmd.Extra.andThen saveListToStorage
@@ -687,10 +686,10 @@ updateVideoList msg state =
                     Cmd.Extra.withNoCmd state
 
         Msg.SaveVideoTimes index ->
-            case Dict.get index state.videos of
+            case Dict.get index state.videoList of
                 Just listItem ->
-                    case (parseTime listItem.startAt, parseTime listItem.endAt) of
-                        (Ok startAt, Ok endAt) ->
+                    case ( parseTime listItem.startAtValue, parseTime listItem.endAtValue ) of
+                        ( Ok startAt, Ok endAt ) ->
                             case validateTimes startAt endAt of
                                 Ok _ ->
                                     let
@@ -716,13 +715,8 @@ updateVideoList msg state =
                                     state -- TODO
                                         |> Cmd.Extra.withNoCmd
 
-                        (Err error, _) ->
-                            state -- TODO
-                                |> Cmd.Extra.withNoCmd
-
-                        (_, Err error) ->
-                            state -- TODO
-                                |> Cmd.Extra.withNoCmd
+                        _ ->
+                            Cmd.Extra.withNoCmd state
 
                 Nothing ->
                     Cmd.Extra.withNoCmd state
@@ -731,7 +725,7 @@ updateVideoList msg state =
             case result of
                 Ok video ->
                     { state
-                        | videos =
+                        | videoList =
                             Dict.update
                                 index
                                 (Maybe.map
@@ -742,7 +736,7 @@ updateVideoList msg state =
                                         }
                                     )
                                 )
-                                state.videos
+                                state.videoList
                     }
                         |> saveListToStorage
 
@@ -754,23 +748,23 @@ updateVideoList msg state =
 
         Msg.SetVideoEndAt index string ->
             { state
-                | videos =
+                | videoList =
                     Dict.update
                         index
                         (Maybe.map
                             (\listItem ->
                                 { listItem
-                                    | endAt = string
+                                    | endAtValue = string
                                 }
                             )
                         )
-                        state.videos
+                        state.videoList
             }
                 |> Cmd.Extra.withNoCmd
 
         Msg.SetVideoNote index string ->
             { state
-                | videos =
+                | videoList =
                     Dict.update
                         index
                         (Maybe.map
@@ -780,108 +774,97 @@ updateVideoList msg state =
                                 }
                             )
                         )
-                        state.videos
+                        state.videoList
             }
                 |> Cmd.Extra.withNoCmd
 
         Msg.SetVideoStartAt index string ->
             { state
-                | videos =
+                | videoList =
                     Dict.update
                         index
                         (Maybe.map
                             (\listItem ->
                                 { listItem
-                                    | startAt = string
+                                    | startAtValue = string
                                 }
                             )
                         )
-                        state.videos
+                        state.videoList
             }
                 |> Cmd.Extra.withNoCmd
 
         Msg.ToggleEditVideo index bool ->
             { state
-                | videos =
+                | videoList =
                     Dict.update
                         index
-                        ( Maybe.map
+                        (Maybe.map
                             (\listItem ->
                                 { listItem
                                     | editOpen = bool
-                                    , startAt = App.secondsToString listItem.video.startAt
                                     , startAtError = Nothing
-                                    , endAt = App.secondsToString listItem.video.endAt
+                                    , startAtValue = App.secondsToString listItem.video.startAt
                                     , endAtError = Nothing
+                                    , endAtValue = App.secondsToString listItem.video.endAt
                                     , note = Maybe.withDefault "" listItem.video.note
                                 }
                             )
                         )
-                        state.videos
+                        state.videoList
             }
                 |> Cmd.Extra.withNoCmd
 
         Msg.ValidateVideoEndAt index ->
-            case Dict.get index state.videos of
-                Just listItem ->
-                    let
-                        ( endAt, endAtError ) =
-                            case parseTime listItem.endAt of
-                                Ok seconds ->
-                                    ( App.secondsToString seconds, Nothing )
-
-                                Err error ->
-                                    ( listItem.endAt, Just error )
-                    in
-                    { state
-                        | videos =
-                            Dict.update
-                                index
-                                ( Maybe.map
-                                    (\listItem_ ->
-                                        { listItem_
-                                            | endAt = endAt
-                                            , endAtError = endAtError
+            { state
+                | videoList =
+                    Dict.update
+                        index
+                        (Maybe.map
+                            (\listItem ->
+                                case parseTime listItem.endAtValue of
+                                    Ok seconds ->
+                                        { listItem
+                                            | endAtError = Nothing
+                                            , endAtValue = App.secondsToString seconds
                                         }
-                                    )
-                                )
-                                state.videos
-                    }
-                        |> Cmd.Extra.withNoCmd
 
-                Nothing ->
-                    Cmd.Extra.withNoCmd state
+                                    Err error ->
+                                        { listItem
+                                            | endAtError = Just error
+                                            , endAtValue = listItem.endAtValue
+                                        }
+                            )
+                        )
+                        state.videoList
+            }
+                |> Cmd.Extra.withNoCmd
+
 
         Msg.ValidateVideoStartAt index ->
-            case Dict.get index state.videos of
-                Just listItem ->
-                    let
-                        ( startAt, startAtError ) =
-                            case parseTime listItem.startAt of
-                                Ok seconds ->
-                                    ( App.secondsToString seconds, Nothing )
-
-                                Err error ->
-                                    ( listItem.startAt, Just error )
-                    in
-                    { state
-                        | videos =
-                            Dict.update
-                                index
-                                ( Maybe.map
-                                    (\listItem_ ->
-                                        { listItem_
-                                            | startAt = startAt
-                                            , startAtError = startAtError
+            { state
+                | videoList =
+                    Dict.update
+                        index
+                        (Maybe.map
+                            (\listItem ->
+                                case parseTime listItem.startAtValue of
+                                    Ok seconds ->
+                                        { listItem
+                                            | startAtError = Nothing
+                                            , startAtValue = App.secondsToString seconds
                                         }
-                                    )
-                                )
-                                state.videos
-                    }
-                        |> Cmd.Extra.withNoCmd
 
-                Nothing ->
-                    Cmd.Extra.withNoCmd state
+                                    Err error ->
+                                        { listItem
+                                            | startAtError = Just error
+                                            , startAtValue = listItem.startAtValue
+                                        }
+                            )
+                        )
+                        state.videoList
+            }
+                |> Cmd.Extra.withNoCmd
 
 
 appendMessage : String -> State -> State
@@ -1003,7 +986,7 @@ saveListToStorage state =
         |> Cmd.Extra.withCmd
             ( Ports.saveToStorage
                 { key = state.playlistStorageKey
-                , value = App.encodePlaylist state.current <| Dict.values state.videos
+                , value = App.encodePlaylist state.currentVideoIndex <| Dict.values state.videoList
                 }
             )
 
@@ -1016,7 +999,7 @@ scrollToCurrent state =
                 (\video playlist playlistViewport ->
                     playlistViewport.viewport.y + video.element.y - playlist.element.y
                 )
-                (Browser.Dom.getElement (App.UI.playlistVideoId state.current))
+                (Browser.Dom.getElement (App.UI.playlistVideoId state.currentVideoIndex))
                 (Browser.Dom.getElement App.UI.playlistId)
                 (Browser.Dom.getViewportOf App.UI.playlistId)
                 |> Task.andThen (\y -> Browser.Dom.setViewportOf App.UI.playlistId 0 y)
@@ -1026,7 +1009,7 @@ scrollToCurrent state =
 
 playCurrentVideo : State -> ( State, Cmd msg )
 playCurrentVideo state =
-    case Dict.get state.current state.videos of
+    case Dict.get state.currentVideoIndex state.videoList of
         Just listItem ->
             state
                 |> Cmd.Extra.withCmd
@@ -1045,7 +1028,7 @@ playCurrentVideo state =
 playNextVideo : State -> ( State, Cmd Msg )
 playNextVideo state =
     { state
-        | current = App.nextIndex state
+        | currentVideoIndex = App.nextIndex state
     }
         |> playCurrentVideo
         |> Cmd.Extra.andThen saveListToStorage

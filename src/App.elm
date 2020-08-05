@@ -39,25 +39,24 @@ type alias Flags =
 
 
 type alias State =
-    { lists : Dict String PlaylistListItem
+    { autoplay : Bool
+    , currentVideoIndex : Int
     , messages : List String
-    , navigationKey : Navigation.Key
+    , oauthClientId : String
+    , oauthResult : OAuth.AuthorizationResult
+    , oauthScopes : List Scope
+    , playlistInStorage : Bool
+    , playlistList : Dict String PlaylistListItem
+    , playlistStorageKey : String
+    , playlistsByChannelValue : String
+    , playlistsByUrlValue : String
     , redirectUri : Url
+    , theme : Theme
     , time : Int
     , token : Maybe Token
-    , videos : Dict Int VideoListItem
-    , current : Int
-    , playlistInStorage : Bool
-    , playlistStorageKey : String
     , tokenStorageKey : String
-    , oauthClientId : String
+    , videoList : Dict Int VideoListItem
     , youtubeApiReady : Bool
-    , theme : Theme
-    , oauthResult : OAuth.AuthorizationResult
-    , playlistsByUrl : String
-    , playlistsByChannel : String
-    , oauthScopes : List Scope
-    , autoplay : Bool
     }
 
 
@@ -98,13 +97,13 @@ type alias PlaylistListItem =
 
 type alias VideoListItem =
     { editOpen : Bool
-    , endAt : String
     , endAtError : Maybe String
+    , endAtValue : String
     , error : Maybe PlayerError
     , note : String
     , playlist : Playlist
-    , startAt : String
     , startAtError : Maybe String
+    , startAtValue : String
     , video : Video
     }
 
@@ -130,13 +129,13 @@ darkTheme =
 makeVideoListItem : Playlist -> Video -> VideoListItem
 makeVideoListItem playlist video =
     { editOpen = False
-    , endAt = ""
     , endAtError = Nothing
+    , endAtValue = ""
     , error = Nothing
     , note = ""
     , playlist = playlist
-    , startAt = ""
     , startAtError = Nothing
+    , startAtValue = ""
     , video = video
     }
 
@@ -205,18 +204,18 @@ decodeToken =
 
 nextIndex : State -> Int
 nextIndex state =
-    if Dict.size state.videos > state.current + 1 then
-        state.current + 1
+    if Dict.size state.videoList > state.currentVideoIndex + 1 then
+        state.currentVideoIndex + 1
     else
         0
 
 
 previousIndex : State -> Int
 previousIndex state =
-    if state.current == 0 then
-        Dict.size state.videos - 1
+    if state.currentVideoIndex == 0 then
+        Dict.size state.videoList - 1
     else
-        max 0 (state.current - 1)
+        max 0 (state.currentVideoIndex - 1)
 
 
 secondsToString : Maybe Int -> String

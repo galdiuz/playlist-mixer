@@ -12,6 +12,7 @@ import Element.Border as Border
 import Element.Events as Events
 import Element.Font as Font
 import Element.Input as Input
+import Element.Lazy as Lazy
 import FontAwesome.Icon
 import FontAwesome.Solid
 import FontAwesome.Styles
@@ -117,20 +118,20 @@ renderFooter state =
             ]
             [ El.newTabLink
                 buttonStyle
-                { label = linkLabel "View privacy policy"
+                { label = renderLinkLabel "View privacy policy"
                 , url = App.privacyPolicyUrl state
                 }
             , El.newTabLink
                 buttonStyle
-                { label = linkLabel "View source on GitHub"
+                { label = renderLinkLabel "View source on GitHub"
                 , url = "https://github.com/galdiuz/playlist-mixer"
                 }
             ]
         ]
 
 
-linkLabel : String -> Element msg
-linkLabel text =
+renderLinkLabel : String -> Element msg
+renderLinkLabel text =
     El.row
         [ El.spacing 5
         ]
@@ -153,7 +154,7 @@ renderSpacer state =
 
 renderWelcomeMessage : State -> Element msg
 renderWelcomeMessage state =
-    if Dict.isEmpty state.videos then
+    if Dict.isEmpty state.videoList then
         El.paragraph
             []
             [ El.text
@@ -170,139 +171,57 @@ renderPlaylistMenu state =
         [ El.spacing 30
         , El.width El.fill
         ]
-        [ if state.playlistInStorage && Dict.isEmpty state.videos then
-            El.column
-                [ El.spacing 10
-                ]
-                [ El.el
-                    [ Font.size 24
-                    ]
-                    <| El.text "Resume from previous list"
-                , Input.button
-                    buttonStyle
-                    { onPress = Just <| Msg.PlaylistList <| Msg.LoadListFromStorage
-                    , label = El.text "Resume"
-                    }
-                ]
-          else
-            El.none
-
+        [ renderPlaylistMenuResume state
         , if Maybe.Extra.isJust state.token then
             El.column
                 [ El.spacing 30
                 , El.width El.fill
                 ]
-                [ El.column
-                    [ El.spacing 10
-                    ]
-                    [ El.el
-                        [ Font.size 24
-                        ]
-                        <| El.text "Load playlists from your YouTube account"
-                    , if Google.OAuth.tokenHasReadScope state.token then
-                        Input.button
-                            buttonStyle
-                            { onPress = Just <| Msg.PlaylistList <| Msg.GetUserPlaylists
-                            , label = El.text "Load"
-                            }
-                      else
-                        El.column
-                            [ El.spacing 10
-                            ]
-                            [ El.paragraph
-                                []
-                                [ El.text
-                                    <| "To fetch playlists from your YouTube account Playlist Mixer"
-
-                                    ++ " needs permission to view your YouTube account. Any data"
-                                    ++ " fetched from your account will only be stored locally in"
-                                    ++ " your browser. For more information, refer to "
-                                , El.newTabLink
-                                    [ Font.underline
-                                    ]
-                                    { label = El.text "Playlist Mixer's privacy policy"
-                                    , url = App.privacyPolicyUrl state
-                                    }
-                                , El.text "."
-                                ]
-                            , Input.button
-                                []
-                                { onPress =
-                                    [ Google.OAuth.Scope.YoutubeReadOnly
-                                    ]
-                                        |> Msg.SignIn
-                                        |> Msg.OAuth
-                                        |> Just
-                                , label = renderSignInButton
-                                }
-                            ]
-                    ]
-                , El.column
-                    [ El.spacing 10
-                    , El.width El.fill
-                    ]
-                    [ El.el
-                        [ Font.size 24
-                        ]
-                        <| El.text "Load playlists by URL or ID"
-                    , Input.multiline
-                        [ Background.color state.theme.bg
-                        , El.width El.fill
-                        ]
-                        { label = Input.labelHidden ""
-                        , onChange = Msg.PlaylistList << Msg.SetPlaylistsByUrl
-                        , placeholder =
-                            Input.placeholder
-                                []
-                                (El.text "https://www.youtube.com/playlist?list=aaabbbccc")
-                                |> Just
-                        , spellcheck = False
-                        , text = state.playlistsByUrl
-                        }
-                    , if String.isEmpty state.playlistsByUrl then
-                        El.el
-                            (disabledButtonStyle state)
-                            <| El.text "Load"
-                      else
-                        Input.button
-                            buttonStyle
-                            { onPress = Just <| Msg.PlaylistList <| Msg.LoadPlaylistsByUrl
-                            , label = El.text "Load"
-                            }
-                    ]
-                , El.column
-                    [ El.spacing 10
-                    , El.width El.fill
-                    ]
-                    [ El.el
-                        [ Font.size 24
-                        ]
-                        <| El.text "Load playlists by channel URL or ID"
-                    , Input.text
-                        [ Background.color state.theme.bg
-                        ]
-                        { label = Input.labelHidden ""
-                        , onChange = Msg.PlaylistList << Msg.SetPlaylistsByChannel
-                        , placeholder =
-                            Input.placeholder
-                                []
-                                (El.text "https://www.youtube.com/channel/aaabbbccc")
-                                |> Just
-                        , text = state.playlistsByChannel
-                        }
-                    , if String.isEmpty state.playlistsByChannel then
-                        El.el
-                            (disabledButtonStyle state)
-                            <| El.text "Load"
-                      else
-                        Input.button
-                            buttonStyle
-                            { onPress = Just <| Msg.PlaylistList <| Msg.LoadPlaylistsByChannel
-                            , label = El.text "Load"
-                            }
-                    ]
+                [ renderPlaylistMenuLoadFromAccount state
+                , renderPlaylistMenuLoadByUrl state
+                , renderPlaylistMenuLoadByChannel state
                 ]
 
+          else
+            renderPlaylistMenuSignIn state
+        ]
+
+
+renderPlaylistMenuResume : State -> Element Msg
+renderPlaylistMenuResume state =
+    if state.playlistInStorage && Dict.isEmpty state.videoList then
+        El.column
+            [ El.spacing 10
+            ]
+            [ El.el
+                [ Font.size 24
+                ]
+                <| El.text "Resume from previous list"
+            , Input.button
+                buttonStyle
+                { onPress = Just <| Msg.PlaylistList <| Msg.LoadListFromStorage
+                , label = El.text "Resume"
+                }
+            ]
+    else
+        El.none
+
+
+renderPlaylistMenuLoadFromAccount : State -> Element Msg
+renderPlaylistMenuLoadFromAccount state =
+    El.column
+        [ El.spacing 10
+        ]
+        [ El.el
+            [ Font.size 24
+            ]
+            <| El.text "Load playlists from your YouTube account"
+        , if Google.OAuth.tokenHasReadScope state.token then
+            Input.button
+                buttonStyle
+                { onPress = Just <| Msg.PlaylistList <| Msg.GetUserPlaylists
+                , label = El.text "Load"
+                }
           else
             El.column
                 [ El.spacing 10
@@ -310,10 +229,10 @@ renderPlaylistMenu state =
                 [ El.paragraph
                     []
                     [ El.text
-                        <| "Fetching playlists from YouTube's APIs requires you to be signed in to"
-
-                        ++ " a Google  account. Playlist Mixer does not collect any personal data."
-                        ++ " For more information, refer to "
+                        <| "To fetch playlists from your YouTube account Playlist Mixer needs"
+                        ++ " permission to view your YouTube account. Any data fetched from your"
+                        ++ " account will only be stored locally in your browser. For more"
+                        ++ " information, refer to "
                     , El.newTabLink
                         [ Font.underline
                         ]
@@ -324,18 +243,123 @@ renderPlaylistMenu state =
                     ]
                 , Input.button
                     []
-                    { onPress = Just <| Msg.OAuth <| Msg.SignIn []
+                    { onPress =
+                        [ Google.OAuth.Scope.YoutubeReadOnly
+                        ]
+                            |> Msg.SignIn
+                            |> Msg.OAuth
+                            |> Just
                     , label = renderSignInButton
                     }
                 ]
         ]
 
 
+renderPlaylistMenuLoadByUrl : State -> Element Msg
+renderPlaylistMenuLoadByUrl state =
+    El.column
+        [ El.spacing 10
+        , El.width El.fill
+        ]
+        [ El.el
+            [ Font.size 24
+            ]
+            <| El.text "Load playlists by URL or ID"
+        , Input.multiline
+            [ Background.color state.theme.bg
+            , El.width El.fill
+            ]
+            { label = Input.labelHidden ""
+            , onChange = Msg.PlaylistList << Msg.SetPlaylistsByUrl
+            , placeholder =
+                Input.placeholder
+                    []
+                    (El.text "https://www.youtube.com/playlist?list=aaabbbccc")
+                    |> Just
+            , spellcheck = False
+            , text = state.playlistsByUrlValue
+            }
+        , if String.isEmpty state.playlistsByUrlValue then
+            El.el
+                (disabledButtonStyle state)
+                <| El.text "Load"
+          else
+            Input.button
+                buttonStyle
+                { onPress = Just <| Msg.PlaylistList <| Msg.LoadPlaylistsByUrl
+                , label = El.text "Load"
+                }
+        ]
+
+
+renderPlaylistMenuLoadByChannel : State -> Element Msg
+renderPlaylistMenuLoadByChannel state =
+    El.column
+        [ El.spacing 10
+        , El.width El.fill
+        ]
+        [ El.el
+            [ Font.size 24
+            ]
+            <| El.text "Load playlists by channel URL or ID"
+        , Input.text
+            [ Background.color state.theme.bg
+            ]
+            { label = Input.labelHidden ""
+            , onChange = Msg.PlaylistList << Msg.SetPlaylistsByChannel
+            , placeholder =
+                Input.placeholder
+                    []
+                    (El.text "https://www.youtube.com/channel/aaabbbccc")
+                    |> Just
+            , text = state.playlistsByChannelValue
+            }
+        , if String.isEmpty state.playlistsByChannelValue then
+            El.el
+                (disabledButtonStyle state)
+                <| El.text "Load"
+          else
+            Input.button
+                buttonStyle
+                { onPress = Just <| Msg.PlaylistList <| Msg.LoadPlaylistsByChannel
+                , label = El.text "Load"
+                }
+        ]
+
+
+renderPlaylistMenuSignIn : State -> Element Msg
+renderPlaylistMenuSignIn state =
+    El.column
+        [ El.spacing 10
+        ]
+        [ El.paragraph
+            []
+            [ El.text
+                <| "Fetching playlists from YouTube's APIs requires you to be signed in to"
+
+                ++ " a Google  account. Playlist Mixer does not collect any personal data."
+                ++ " For more information, refer to "
+            , El.newTabLink
+                [ Font.underline
+                ]
+                { label = El.text "Playlist Mixer's privacy policy"
+                , url = App.privacyPolicyUrl state
+                }
+            , El.text "."
+            ]
+        , Input.button
+            []
+            { onPress = Just <| Msg.OAuth <| Msg.SignIn []
+            , label = renderSignInButton
+            }
+        ]
+
+
 renderPlayer : State -> Element Msg
 renderPlayer state =
-    if Dict.isEmpty state.videos then
+    if Dict.isEmpty state.videoList then
         El.none
-      else
+    else
         El.column
             [ El.width El.fill
             , El.spacing 10
@@ -347,8 +371,7 @@ renderPlayer state =
                 , El.centerX
                 ]
                 El.none
-
-            , case Dict.get state.current state.videos of
+            , case Dict.get state.currentVideoIndex state.videoList of
                 Just listItem ->
                     El.column
                         []
@@ -358,31 +381,12 @@ renderPlayer state =
                             ]
                             [ El.text listItem.video.title
                             ]
-                        , case ( listItem.video.startAt, listItem.video.endAt ) of
-                            ( Just startAt, Just endAt ) ->
-                                "({{}} - {{}})"
-                                    |> String.Format.value (App.secondsToString <| Just startAt)
-                                    |> String.Format.value (App.secondsToString <| Just endAt)
-                                    |> El.text
-
-                            ( Just startAt, Nothing ) ->
-                                "({{}} - End)"
-                                    |> String.Format.value (App.secondsToString <| Just startAt)
-                                    |> El.text
-
-                            ( Nothing, Just endAt ) ->
-                                "(0:00 - {{}})"
-                                    |> String.Format.value (App.secondsToString <| Just endAt)
-                                    |> El.text
-
-                            ( Nothing, Nothing ) ->
-                                El.none
+                        , renderTimeRange listItem
                         ]
 
                 Nothing ->
                     El.none
-
-            , case Dict.get (App.nextIndex state) state.videos of
+            , case Dict.get (App.nextIndex state) state.videoList of
                 Just listItem ->
                     El.column
                         []
@@ -413,17 +417,40 @@ renderPlayer state =
             ]
 
 
+renderTimeRange : App.VideoListItem -> Element msg
+renderTimeRange listItem =
+    case ( listItem.video.startAt, listItem.video.endAt ) of
+        ( Just startAt, Just endAt ) ->
+            "({{}} - {{}})"
+                |> String.Format.value (App.secondsToString <| Just startAt)
+                |> String.Format.value (App.secondsToString <| Just endAt)
+                |> El.text
+
+        ( Just startAt, Nothing ) ->
+            "({{}} - End)"
+                |> String.Format.value (App.secondsToString <| Just startAt)
+                |> El.text
+
+        ( Nothing, Just endAt ) ->
+            "(0:00 - {{}})"
+                |> String.Format.value (App.secondsToString <| Just endAt)
+                |> El.text
+
+        ( Nothing, Nothing ) ->
+            El.none
+
+
 renderPlaylistList : State -> Element Msg
 renderPlaylistList state =
-    if Dict.isEmpty state.lists then
+    if Dict.isEmpty state.playlistList then
         El.none
     else
         let
             hasSelectedLists =
-                not <| List.isEmpty (List.filter .checked (Dict.values state.lists))
+                not <| List.isEmpty (List.filter .checked (Dict.values state.playlistList))
 
             hasPlaylist =
-                not <| Dict.isEmpty state.videos
+                not <| Dict.isEmpty state.videoList
         in
         El.column
             [ El.paddingXY 0 5
@@ -502,10 +529,7 @@ renderPlaylistList state =
             , El.column
                 [ El.spacing 5
                 , El.padding 5
-                , El.height
-                    (El.shrink
-                        |> El.maximum 400
-                    )
+                , El.height <| El.maximum 400 El.shrink
                 , El.width El.fill
                 , El.scrollbarY
                 ]
@@ -523,12 +547,12 @@ renderPlaylistList state =
                                 }
                             , El.newTabLink
                                 buttonStyle
-                                { label = linkLabel "Open playlist"
+                                { label = renderLinkLabel "Open playlist"
                                 , url = Playlist.url listItem.playlist
                                 }
                             ]
                     )
-                    (Dict.values state.lists
+                    (Dict.values state.playlistList
                         |> List.sortBy (.playlist >> .title)
                     )
             ]
@@ -536,7 +560,7 @@ renderPlaylistList state =
 
 renderVideoList : State -> Element Msg
 renderVideoList state =
-    if Dict.isEmpty state.videos then
+    if Dict.isEmpty state.videoList then
         El.none
       else
         El.column
@@ -548,16 +572,17 @@ renderVideoList state =
             [ El.column
                 [ El.spacing 10
                 , El.padding 5
+                , El.height El.shrink
                 ]
                 <| List.intersperse (renderSpacer state)
                 <| List.map
-                    (renderVideoListItem state)
-                    (Dict.toList state.videos)
+                    (Lazy.lazy <| renderVideoListItem state)
+                    (Dict.toList state.videoList)
             ]
 
 
 renderVideoListItem : State -> ( Int, App.VideoListItem ) -> Element Msg
-renderVideoListItem state (index, listItem) =
+renderVideoListItem state ( index, listItem ) =
     El.row
         [ El.spacing 5
         , El.htmlAttribute <| HA.id <| playlistVideoId index
@@ -589,90 +614,17 @@ renderVideoListItem state (index, listItem) =
                     }
                 , El.newTabLink
                     buttonStyle
-                    { label = linkLabel "Open Video"
+                    { label = renderLinkLabel "Open Video"
                     , url = Video.url listItem.video
                     }
                 , El.newTabLink
                     buttonStyle
-                    { label = linkLabel "Open Playlist"
+                    { label = renderLinkLabel "Open Playlist"
                     , url = Playlist.url listItem.playlist
                     }
                 ]
             , if listItem.editOpen then
-                if Google.OAuth.tokenHasWriteScope state.token then
-                    El.column
-                        [ El.spacing 10
-                        ]
-                        [ renderTimeInput
-                            { error = listItem.startAtError
-                            , label = "Start:"
-                            , onChange = Msg.VideoList << Msg.SetVideoStartAt index
-                            , onLoseFocus = Msg.VideoList <| Msg.ValidateVideoStartAt index
-                            , value = listItem.startAt
-                            }
-                            state
-                        , renderTimeInput
-                            { error = listItem.endAtError
-                            , label = "End:"
-                            , onChange = Msg.VideoList << Msg.SetVideoEndAt index
-                            , onLoseFocus = Msg.VideoList <| Msg.ValidateVideoEndAt index
-                            , value = listItem.endAt
-                            }
-                            state
-                        , Input.multiline
-                            [ Background.color state.theme.bg
-                            ]
-                            { label = Input.labelLeft [] <| El.text "Note:"
-                            , onChange = Msg.VideoList << Msg.SetVideoNote index
-                            , placeholder = Nothing
-                            , spellcheck = False
-                            , text = listItem.note
-                            }
-                        , El.row
-                            [ El.spacing 10
-                            ]
-                            [ Input.button
-                                buttonStyle
-                                { onPress = Just <| Msg.VideoList <| Msg.SaveVideoTimes index
-                                , label = El.text "Save"
-                                }
-                            , Input.button
-                                buttonStyle
-                                { onPress = Just <| Msg.VideoList <| Msg.ToggleEditVideo index False
-                                , label = El.text "Cancel"
-                                }
-                            ]
-                        ]
-                else
-                    El.column
-                        [ El.spacing 10
-                        ]
-                        [ El.paragraph
-                            []
-                            [ El.text
-                                <| "To save notes on your playlist Playlist Mixer needs permission"
-                                ++ " to manage your YouTube account. Playlist Mixer will only use"
-                                ++ " this permission for this purpose and nothing else. For more"
-                                ++ " information, refer to "
-                            , El.newTabLink
-                                [ Font.underline
-                                ]
-                                { label = El.text "Playlist Mixer's privacy policy"
-                                , url = App.privacyPolicyUrl state
-                                }
-                            , El.text "."
-                            ]
-                        , Input.button
-                            []
-                            { onPress =
-                                [ Google.OAuth.Scope.Youtube
-                                ]
-                                    |> Msg.SignIn
-                                    |> Msg.OAuth
-                                    |> Just
-                            , label = renderSignInButton
-                            }
-                        ]
+                renderVideoListItemEdit state index listItem
               else
                 El.none
             , case listItem.error of
@@ -689,6 +641,83 @@ renderVideoListItem state (index, listItem) =
                     El.none
             ]
         ]
+
+
+renderVideoListItemEdit : State -> Int -> App.VideoListItem -> Element Msg
+renderVideoListItemEdit state index listItem =
+    if Google.OAuth.tokenHasWriteScope state.token then
+        El.column
+            [ El.spacing 10
+            ]
+            [ renderTimeInput
+                { error = listItem.startAtError
+                , label = "Start:"
+                , onChange = Msg.VideoList << Msg.SetVideoStartAt index
+                , onLoseFocus = Msg.VideoList <| Msg.ValidateVideoStartAt index
+                , value = listItem.startAtValue
+                }
+                state
+            , renderTimeInput
+                { error = listItem.endAtError
+                , label = "End:"
+                , onChange = Msg.VideoList << Msg.SetVideoEndAt index
+                , onLoseFocus = Msg.VideoList <| Msg.ValidateVideoEndAt index
+                , value = listItem.endAtValue
+                }
+                state
+            , Input.multiline
+                [ Background.color state.theme.bg
+                ]
+                { label = Input.labelLeft [] <| El.text "Note:"
+                , onChange = Msg.VideoList << Msg.SetVideoNote index
+                , placeholder = Nothing
+                , spellcheck = False
+                , text = listItem.note
+                }
+            , El.row
+                [ El.spacing 10
+                ]
+                [ Input.button
+                    buttonStyle
+                    { onPress = Just <| Msg.VideoList <| Msg.SaveVideoTimes index
+                    , label = El.text "Save"
+                    }
+                , Input.button
+                    buttonStyle
+                    { onPress = Just <| Msg.VideoList <| Msg.ToggleEditVideo index False
+                    , label = El.text "Cancel"
+                    }
+                ]
+            ]
+    else
+        El.column
+            [ El.spacing 10
+            ]
+            [ El.paragraph
+                []
+                [ El.text
+                    <| "To save notes on your playlist Playlist Mixer needs permission to manage"
+                    ++ " your YouTube account. Playlist Mixer will only use this permission for"
+                    ++ " this purpose and nothing else. For more information, refer to "
+                , El.newTabLink
+                    [ Font.underline
+                    ]
+                    { label = El.text "Playlist Mixer's privacy policy"
+                    , url = App.privacyPolicyUrl state
+                    }
+                , El.text "."
+                ]
+            , Input.button
+                []
+                { onPress =
+                    [ Google.OAuth.Scope.Youtube
+                    ]
+                        |> Msg.SignIn
+                        |> Msg.OAuth
+                        |> Just
+                , label = renderSignInButton
+                }
+            ]
 
 
 renderTimeInput :
@@ -850,7 +879,6 @@ renderDevelopedWithYoutube state =
         , El.width <| El.minimum 243 El.shrink
         ]
         El.none
-
 
 
 paddingZero : { top : Int, bottom : Int, left : Int, right : Int }
