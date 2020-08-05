@@ -80,9 +80,13 @@ type VideoListMsg
     | SaveVideoTimes Int
     | SaveVideoTimesResult Int (Result Http.Error Video)
     | ScrollToCurrentVideo
+    | SetSearch String
     | SetVideoEndAt Int String
     | SetVideoNote Int String
     | SetVideoStartAt Int String
+    | ShowCurrentVideo
+    | ShowEarlierVideos
+    | ShowLaterVideos
     | ToggleEditVideo Int Bool
     | ValidateVideoEndAt Int
     | ValidateVideoStartAt Int

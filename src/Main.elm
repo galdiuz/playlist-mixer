@@ -60,6 +60,7 @@ init flags url _ =
             getToken flags oauthResult
     in
     { autoplay = True
+    , currentListIndex = 0
     , currentVideoIndex = 0
     , messages = []
     , oauthClientId = flags.oauthClientId
@@ -71,6 +72,7 @@ init flags url _ =
     , playlistsByChannelValue = ""
     , playlistsByUrlValue = ""
     , redirectUri = { url | query = Nothing, fragment = Nothing }
+    , searchValue = ""
     , theme = App.darkTheme
     , time = flags.time
     , token = token
@@ -264,9 +266,10 @@ updatePlayer msg state =
             { state
                 | currentVideoIndex = App.previousIndex state
             }
+                |> updateCurrentListIndex
                 |> playCurrentVideo
                 |> Cmd.Extra.andThen saveListToStorage
-                |> Cmd.Extra.andThen scrollToCurrent
+                |> Cmd.Extra.andThen scrollListToCurrent
 
         Msg.PlayerError value ->
             case Decode.decodeValue (Decode.field "data" PlayerError.decoder) value of
@@ -607,6 +610,7 @@ updateStorage msg state =
                                     |> List.indexedMap Tuple.pair
                                     |> Dict.fromList
                         }
+                            |> updateCurrentListIndex
                             |> Cmd.Extra.withCmd (Ports.createPlayer App.UI.playerId)
                             |> Cmd.Extra.addCmd
                                 ( Task.perform
@@ -744,7 +748,13 @@ updateVideoList msg state =
                     Cmd.Extra.withNoCmd state -- TODO
 
         Msg.ScrollToCurrentVideo ->
-            scrollToCurrent state
+            scrollListToCurrent state
+
+        Msg.SetSearch value ->
+            { state
+                | searchValue = value
+            }
+                |> Cmd.Extra.withNoCmd
 
         Msg.SetVideoEndAt index string ->
             { state
@@ -793,6 +803,27 @@ updateVideoList msg state =
                         state.videoList
             }
                 |> Cmd.Extra.withNoCmd
+
+        Msg.ShowCurrentVideo ->
+            state
+                |> updateCurrentListIndex
+                |> scrollListToCurrent
+
+        Msg.ShowEarlierVideos ->
+            { state
+                | currentListIndex =
+                    state.currentListIndex - App.videoListPageSize
+                        |> max 0
+            }
+                |> scrollListToTop
+
+        Msg.ShowLaterVideos ->
+            { state
+                | currentListIndex =
+                    state.currentListIndex + App.videoListPageSize
+                        |> min (Dict.size state.videoList - App.videoListPageSize)
+            }
+                |> scrollListToTop
 
         Msg.ToggleEditVideo index bool ->
             { state
@@ -991,11 +1022,11 @@ saveListToStorage state =
             )
 
 
-scrollToCurrent : State -> ( State, Cmd Msg )
-scrollToCurrent state =
+scrollListToCurrent : State -> ( State, Cmd Msg )
+scrollListToCurrent state =
     state
         |> Cmd.Extra.withCmd
-            ( Task.map3
+            (Task.map3
                 (\video playlist playlistViewport ->
                     playlistViewport.viewport.y + video.element.y - playlist.element.y
                 )
@@ -1003,6 +1034,15 @@ scrollToCurrent state =
                 (Browser.Dom.getElement App.UI.playlistId)
                 (Browser.Dom.getViewportOf App.UI.playlistId)
                 |> Task.andThen (\y -> Browser.Dom.setViewportOf App.UI.playlistId 0 y)
+                |> Task.attempt (\_ -> Msg.NoOp)
+            )
+
+
+scrollListToTop : State -> ( State, Cmd Msg )
+scrollListToTop state =
+    state
+        |> Cmd.Extra.withCmd
+            (Browser.Dom.setViewportOf App.UI.playlistId 0 0
                 |> Task.attempt (\_ -> Msg.NoOp)
             )
 
@@ -1030,9 +1070,20 @@ playNextVideo state =
     { state
         | currentVideoIndex = App.nextIndex state
     }
+        |> updateCurrentListIndex
         |> playCurrentVideo
         |> Cmd.Extra.andThen saveListToStorage
-        |> Cmd.Extra.andThen scrollToCurrent
+        |> Cmd.Extra.andThen scrollListToCurrent
+
+
+updateCurrentListIndex : State -> State
+updateCurrentListIndex state =
+    { state
+        | currentListIndex =
+            state.currentVideoIndex - 3
+                |> max 0
+                |> min (Dict.size state.videoList - App.videoListPageSize)
+    }
 
 
 convertBytes : List Int -> String

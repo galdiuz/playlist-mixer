@@ -40,6 +40,7 @@ type alias Flags =
 
 type alias State =
     { autoplay : Bool
+    , currentListIndex : Int
     , currentVideoIndex : Int
     , messages : List String
     , oauthClientId : String
@@ -51,6 +52,7 @@ type alias State =
     , playlistsByChannelValue : String
     , playlistsByUrlValue : String
     , redirectUri : Url
+    , searchValue : String
     , theme : Theme
     , time : Int
     , token : Maybe Token
@@ -235,3 +237,8 @@ privacyPolicyUrl state =
     Url.Builder.relative
         [ "privacy-policy.md" ]
         []
+
+
+videoListPageSize : Int
+videoListPageSize =
+    20

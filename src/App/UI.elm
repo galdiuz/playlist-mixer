@@ -12,6 +12,7 @@ import Element.Border as Border
 import Element.Events as Events
 import Element.Font as Font
 import Element.Input as Input
+import Element.Keyed as Keyed
 import Element.Lazy as Lazy
 import FontAwesome.Icon
 import FontAwesome.Solid
@@ -401,7 +402,7 @@ renderPlayer state =
                 Nothing ->
                     El.none
             , El.row
-                [ El.spacing 5
+                [ El.spacing 10
                 ]
                 [ Input.button
                     buttonStyle
@@ -563,40 +564,143 @@ renderVideoList state =
     if Dict.isEmpty state.videoList then
         El.none
       else
+        let
+            isSearching =
+                not <| String.isEmpty state.searchValue
+
+            videoList =
+                if isSearching then
+                    List.filter
+                        (\( _, listItem ) ->
+                            state.searchValue
+                                |> String.words
+                                |> List.all
+                                    (\word ->
+                                        String.contains
+                                            (String.toLower word)
+                                            (String.toLower listItem.video.title)
+                                    )
+                        )
+                        (Dict.toList state.videoList)
+                else
+                    Dict.toList state.videoList
+                        |> List.drop state.currentListIndex
+                        |> List.take App.videoListPageSize
+        in
         El.column
-            [ El.scrollbarY
-            , El.height <| El.maximum 600 El.shrink
-            , El.htmlAttribute <| HA.id playlistId
-            , El.width El.fill
+            [ El.width El.fill
+            , El.spacing 10
             ]
-            [ El.column
+            [ El.row
                 [ El.spacing 10
-                , El.padding 5
-                , El.height El.shrink
                 ]
-                <| List.intersperse (renderSpacer state)
-                <| List.map
-                    (Lazy.lazy <| renderVideoListItem state)
-                    (Dict.toList state.videoList)
+                [ if not isSearching then
+                    "Showing {{}}-{{}} (of {{}})"
+                        |> String.Format.value (String.fromInt <| state.currentListIndex + 1)
+                        |> String.Format.value
+                            (String.fromInt
+                                (min
+                                    (Dict.size state.videoList)
+                                    (state.currentListIndex + App.videoListPageSize)
+                                )
+                            )
+                        |> String.Format.value (String.fromInt <| Dict.size state.videoList)
+                        |> El.text
+                  else if List.length videoList > App.videoListPageSize then
+                    "Showing first {{}} matches"
+                        |> String.Format.value (String.fromInt App.videoListPageSize)
+                        |> El.text
+                  else
+                    "Showing {{}} matches"
+                        |> String.Format.value (String.fromInt <| List.length videoList)
+                        |> El.text
+                , Input.text
+                    [ Background.color state.theme.bg
+                    ]
+                    { label = Input.labelLeft [] <| El.text "Search:"
+                    , onChange = Msg.VideoList << Msg.SetSearch
+                    , placeholder = Nothing
+                    , text = state.searchValue
+                    }
+                ]
+            , if isSearching then
+                El.none
+              else
+                El.row
+                    [ El.spacing 10
+                    ]
+                    [ if state.currentListIndex > 0 then
+                        Input.button
+                            buttonStyle
+                            { label = El.text "Show earlier videos"
+                            , onPress = Just <| Msg.VideoList Msg.ShowEarlierVideos
+                            }
+                      else
+                        El.el
+                            (disabledButtonStyle state)
+                            <| El.text "Show earlier videos"
+                    , Input.button
+                        buttonStyle
+                        { label = El.text "Show current video"
+                        , onPress = Just <| Msg.VideoList Msg.ShowCurrentVideo
+                        }
+                    , if state.currentListIndex < Dict.size state.videoList - App.videoListPageSize then
+                        Input.button
+                            buttonStyle
+                            { label = El.text "Show later videos"
+                            , onPress = Just <| Msg.VideoList Msg.ShowLaterVideos
+                            }
+                      else
+                        El.el
+                            (disabledButtonStyle state)
+                            <| El.text "Show later videos"
+                    ]
+            , El.column
+                [ El.scrollbarY
+                , El.height <| El.maximum 600 El.shrink
+                , El.htmlAttribute <| HA.id playlistId
+                , El.width El.fill
+                ]
+                [ El.column
+                    [ El.spacing 10
+                    , El.padding 5
+                    , El.height El.shrink
+                    ]
+                    (videoList
+                        |> List.take App.videoListPageSize
+                        |> List.map
+                            (\( index, listItem ) ->
+                                Keyed.el
+                                    []
+                                    ( listItem.video.id
+                                    , Lazy.lazy (renderVideoListItem state index) listItem
+                                    )
+                            )
+                        |> List.intersperse (renderSpacer state)
+                    )
+                ]
             ]
 
 
-renderVideoListItem : State -> ( Int, App.VideoListItem ) -> Element Msg
-renderVideoListItem state ( index, listItem ) =
+renderVideoListItem : State -> Int -> App.VideoListItem -> Element Msg
+renderVideoListItem state index listItem =
     El.row
         [ El.spacing 5
         , El.htmlAttribute <| HA.id <| playlistVideoId index
         , El.width El.fill
         ]
         [ El.el
-            [ El.alignTop ]
+            [ El.alignTop
+            , maybeAttribute (index == state.currentVideoIndex) Font.bold
+            ]
             <| El.text <| String.fromInt (index + 1) ++ "."
         , El.column
             [ El.width El.fill
             , El.spacing 10
             ]
             [ El.paragraph
-                []
+                [ maybeAttribute (index == state.currentVideoIndex) Font.bold
+                ]
                 [ El.text listItem.video.title
                 ]
             , El.row
@@ -609,7 +713,7 @@ renderVideoListItem state ( index, listItem ) =
                     }
                 , Input.button
                     buttonStyle
-                    { onPress = Just (Msg.VideoList (Msg.ToggleEditVideo index (not listItem.editOpen)))
+                    { onPress = Just <| Msg.VideoList <| Msg.ToggleEditVideo index <| not listItem.editOpen
                     , label = El.text "Edit"
                     }
                 , El.newTabLink
@@ -749,7 +853,7 @@ renderTimeInput data state =
                     El.none
             )
         , Events.onLoseFocus data.onLoseFocus
-        , maybeAttribute data.error <| Border.color state.theme.error
+        , maybeAttribute (Maybe.Extra.isJust data.error) (Border.color state.theme.error)
         ]
         { label = Input.labelLeft [] <| El.text data.label
         , onChange = data.onChange
@@ -824,9 +928,9 @@ renderConfig state =
         ]
 
 
-maybeAttribute : Maybe a -> El.Attribute msg -> El.Attribute msg
-maybeAttribute maybe attr =
-    if Maybe.Extra.isJust maybe then
+maybeAttribute : Bool -> El.Attribute msg -> El.Attribute msg
+maybeAttribute bool attr =
+    if bool then
         attr
     else
         El.focused []
