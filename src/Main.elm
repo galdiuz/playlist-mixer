@@ -72,6 +72,7 @@ init flags url _ =
     , playlistsByChannelValue = ""
     , playlistsByUrlValue = ""
     , redirectUri = { url | query = Nothing, fragment = Nothing }
+    , scrolling = False
     , searchValue = ""
     , theme = App.darkTheme
     , time = flags.time
@@ -613,7 +614,7 @@ updateStorage msg state =
                             |> updateCurrentListIndex
                             |> Cmd.Extra.withCmd (Ports.createPlayer App.UI.playerId)
                             |> Cmd.Extra.addCmd
-                                ( Task.perform
+                                (Task.perform
                                     (\_ -> Msg.VideoList <| Msg.ScrollToCurrentVideo)
                                     (Process.sleep 10)
                                 )
@@ -747,8 +748,99 @@ updateVideoList msg state =
                 Err err ->
                     Cmd.Extra.withNoCmd state -- TODO
 
+        Msg.Scroll scroll ->
+            let
+                scrollOffset =
+                    50
+
+                isSearching =
+                    not <| String.isEmpty state.searchValue
+
+                isEarlierAvailable =
+                    state.currentListIndex > 0
+
+                isNearTop =
+                    round scroll.scrollTop < scrollOffset
+
+                isLaterAvailable =
+                    state.currentListIndex < Dict.size state.videoList - App.videoListPageSize
+
+                isNearBottom =
+                    (round scroll.scrollTop) + scroll.containerHeight > scroll.contentHeight - scrollOffset
+            in
+            if not state.scrolling && not isSearching && isEarlierAvailable && isNearTop then
+                { state
+                    | scrolling = True
+                }
+                    |> Cmd.Extra.withCmd
+                        (Browser.Dom.getElement
+                            (App.UI.videoListVideoId state.currentListIndex)
+                            |> Task.map (.element >> .y)
+                            |> Task.attempt
+                                (Result.map (Msg.VideoList << Msg.ScrollEarlier)
+                                    >> Result.withDefault Msg.NoOp
+                                )
+                        )
+            else if not state.scrolling && not isSearching && isLaterAvailable && isNearBottom then
+                { state
+                    | scrolling = True
+                }
+                    |> Cmd.Extra.withCmd
+                        (Browser.Dom.getElement
+                            (App.UI.videoListVideoId <| state.currentListIndex + App.videoListPageSize - 1)
+                            |> Task.map (.element >> .y)
+                            |> Task.attempt
+                                (Result.map (Msg.VideoList << Msg.ScrollLater)
+                                    >> Result.withDefault Msg.NoOp
+                                )
+                        )
+            else
+                Cmd.Extra.withNoCmd state
+
+        Msg.ScrollEarlier prevY ->
+            { state
+                | currentListIndex =
+                    state.currentListIndex - 10
+                        |> Basics.max 0
+            }
+                |> Cmd.Extra.withCmd
+                    (Task.map2
+                        (\video videoListViewport ->
+                            videoListViewport.viewport.y - prevY + video.element.y
+                        )
+                        (Browser.Dom.getElement (App.UI.videoListVideoId state.currentListIndex))
+                        (Browser.Dom.getViewportOf App.UI.videoListId)
+                        |> Task.andThen (\y -> Browser.Dom.setViewportOf App.UI.videoListId 0 y)
+                        |> Task.attempt (\_ -> Msg.VideoList Msg.SetScrolling)
+                    )
+
+        Msg.ScrollLater prevY ->
+            { state
+                | currentListIndex =
+                    state.currentListIndex + 10
+                        |> Basics.min (Dict.size state.videoList - App.videoListPageSize)
+            }
+                |> Cmd.Extra.withCmd
+                    (Task.map2
+                        (\video videoListViewport ->
+                            videoListViewport.viewport.y - prevY + video.element.y
+                        )
+                        (Browser.Dom.getElement
+                            (App.UI.videoListVideoId <| state.currentListIndex + App.videoListPageSize - 1)
+                        )
+                        (Browser.Dom.getViewportOf App.UI.videoListId)
+                        |> Task.andThen (\y -> Browser.Dom.setViewportOf App.UI.videoListId 0 y)
+                        |> Task.attempt (\_ -> Msg.VideoList Msg.SetScrolling)
+                    )
+
         Msg.ScrollToCurrentVideo ->
             scrollListToCurrent state
+
+        Msg.SetScrolling ->
+            { state
+                | scrolling = False
+            }
+                |> Cmd.Extra.withNoCmd
 
         Msg.SetSearch value ->
             { state
@@ -813,7 +905,7 @@ updateVideoList msg state =
             { state
                 | currentListIndex =
                     state.currentListIndex - App.videoListPageSize
-                        |> max 0
+                        |> Basics.max 0
             }
                 |> scrollListToTop
 
@@ -821,7 +913,7 @@ updateVideoList msg state =
             { state
                 | currentListIndex =
                     state.currentListIndex + App.videoListPageSize
-                        |> min (Dict.size state.videoList - App.videoListPageSize)
+                        |> Basics.min (Dict.size state.videoList - App.videoListPageSize)
             }
                 |> scrollListToTop
 
@@ -1027,13 +1119,13 @@ scrollListToCurrent state =
     state
         |> Cmd.Extra.withCmd
             (Task.map3
-                (\video playlist playlistViewport ->
-                    playlistViewport.viewport.y + video.element.y - playlist.element.y
+                (\video videoList videoListViewport ->
+                    videoListViewport.viewport.y - videoList.element.y + video.element.y
                 )
-                (Browser.Dom.getElement (App.UI.playlistVideoId state.currentVideoIndex))
-                (Browser.Dom.getElement App.UI.playlistId)
-                (Browser.Dom.getViewportOf App.UI.playlistId)
-                |> Task.andThen (\y -> Browser.Dom.setViewportOf App.UI.playlistId 0 y)
+                (Browser.Dom.getElement (App.UI.videoListVideoId state.currentVideoIndex))
+                (Browser.Dom.getElement App.UI.videoListId)
+                (Browser.Dom.getViewportOf App.UI.videoListId)
+                |> Task.andThen (\y -> Browser.Dom.setViewportOf App.UI.videoListId 0 y)
                 |> Task.attempt (\_ -> Msg.NoOp)
             )
 
@@ -1042,7 +1134,7 @@ scrollListToTop : State -> ( State, Cmd Msg )
 scrollListToTop state =
     state
         |> Cmd.Extra.withCmd
-            (Browser.Dom.setViewportOf App.UI.playlistId 0 0
+            (Browser.Dom.setViewportOf App.UI.videoListId 0 0
                 |> Task.attempt (\_ -> Msg.NoOp)
             )
 
@@ -1081,8 +1173,8 @@ updateCurrentListIndex state =
     { state
         | currentListIndex =
             state.currentVideoIndex - 3
-                |> max 0
-                |> min (Dict.size state.videoList - App.videoListPageSize)
+                |> Basics.max 0
+                |> Basics.min (Dict.size state.videoList - App.videoListPageSize)
     }
 
 

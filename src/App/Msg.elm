@@ -79,7 +79,11 @@ type VideoListMsg
     = PlayVideo Int
     | SaveVideoTimes Int
     | SaveVideoTimesResult Int (Result Http.Error Video)
+    | Scroll App.ScrollPos
+    | ScrollEarlier Float
+    | ScrollLater Float
     | ScrollToCurrentVideo
+    | SetScrolling
     | SetSearch String
     | SetVideoEndAt Int String
     | SetVideoNote Int String

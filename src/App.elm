@@ -52,6 +52,7 @@ type alias State =
     , playlistsByChannelValue : String
     , playlistsByUrlValue : String
     , redirectUri : Url
+    , scrolling : Bool
     , searchValue : String
     , theme : Theme
     , time : Int
@@ -107,6 +108,13 @@ type alias VideoListItem =
     , startAtError : Maybe String
     , startAtValue : String
     , video : Video
+    }
+
+
+type alias ScrollPos =
+    { scrollTop : Float
+    , contentHeight : Int
+    , containerHeight : Int
     }
 
 
@@ -241,4 +249,42 @@ privacyPolicyUrl state =
 
 videoListPageSize : Int
 videoListPageSize =
-    20
+    30
+
+
+decodeScrollPos : Decode.Decoder ScrollPos
+decodeScrollPos =
+    Decode.map3
+        (\scrollTop content container ->
+            { scrollTop = scrollTop
+            , contentHeight = content
+            , containerHeight = container
+            }
+        )
+        (Decode.oneOf
+            [ Decode.at [ "target", "scrollTop" ] Decode.float
+            , Decode.at [ "target", "scrollingElement", "scrollTop" ] Decode.float
+            ]
+        )
+        (Decode.oneOf
+            [ Decode.at [ "target", "scrollHeight" ] Decode.int
+            , Decode.at [ "target", "scrollingElement", "scrollHeight" ] Decode.int
+            ]
+        )
+        (Decode.map2 Basics.max offsetHeight clientHeight)
+
+
+offsetHeight : Decode.Decoder Int
+offsetHeight =
+    Decode.oneOf
+        [ Decode.at [ "target", "offsetHeight" ] Decode.int
+        , Decode.at [ "target", "scrollingElement", "offsetHeight" ] Decode.int
+        ]
+
+
+clientHeight : Decode.Decoder Int
+clientHeight =
+    Decode.oneOf
+        [ Decode.at [ "target", "clientHeight" ] Decode.int
+        , Decode.at [ "target", "scrollingElement", "clientHeight" ] Decode.int
+        ]

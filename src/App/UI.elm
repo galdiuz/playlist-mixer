@@ -1,8 +1,8 @@
 module App.UI exposing
-    ( playlistVideoId
-    , playlistId
-    , playerId
+    ( playerId
     , render
+    , videoListId
+    , videoListVideoId
     )
 
 import Dict
@@ -19,6 +19,8 @@ import FontAwesome.Solid
 import FontAwesome.Styles
 import Html exposing (Html)
 import Html.Attributes as HA
+import Html.Events
+import Json.Decode as Decode
 import Maybe.Extra
 import OAuth
 import OAuth.Implicit as OAuth
@@ -629,37 +631,29 @@ renderVideoList state =
                 El.row
                     [ El.spacing 10
                     ]
-                    [ if state.currentListIndex > 0 then
-                        Input.button
-                            buttonStyle
-                            { label = El.text "Show earlier videos"
-                            , onPress = Just <| Msg.VideoList Msg.ShowEarlierVideos
-                            }
-                      else
-                        El.el
-                            (disabledButtonStyle state)
-                            <| El.text "Show earlier videos"
-                    , Input.button
+                    [ Input.button
                         buttonStyle
                         { label = El.text "Show current video"
                         , onPress = Just <| Msg.VideoList Msg.ShowCurrentVideo
                         }
-                    , if state.currentListIndex < Dict.size state.videoList - App.videoListPageSize then
-                        Input.button
-                            buttonStyle
-                            { label = El.text "Show later videos"
-                            , onPress = Just <| Msg.VideoList Msg.ShowLaterVideos
-                            }
-                      else
-                        El.el
-                            (disabledButtonStyle state)
-                            <| El.text "Show later videos"
                     ]
             , El.column
                 [ El.scrollbarY
                 , El.height <| El.maximum 600 El.shrink
-                , El.htmlAttribute <| HA.id playlistId
+                , El.htmlAttribute <| HA.id videoListId
                 , El.width El.fill
+                , El.htmlAttribute
+                    (Html.Events.stopPropagationOn
+                        "scroll"
+                        (Decode.map
+                            (\scroll ->
+                                ( Msg.VideoList <| Msg.Scroll scroll
+                                , True
+                                )
+                            )
+                            App.decodeScrollPos
+                        )
+                    )
                 ]
                 [ El.column
                     [ El.spacing 10
@@ -686,7 +680,7 @@ renderVideoListItem : State -> Int -> App.VideoListItem -> Element Msg
 renderVideoListItem state index listItem =
     El.row
         [ El.spacing 5
-        , El.htmlAttribute <| HA.id <| playlistVideoId index
+        , El.htmlAttribute <| HA.id <| videoListVideoId index
         , El.width El.fill
         ]
         [ El.el
@@ -999,11 +993,11 @@ playerId =
     "player"
 
 
-playlistId : String
-playlistId =
-    "playlist"
+videoListId : String
+videoListId =
+    "video-list"
 
 
-playlistVideoId : Int -> String
-playlistVideoId index =
-    "playlist-video-" ++ String.fromInt index
+videoListVideoId : Int -> String
+videoListVideoId index =
+    "video-list-video-" ++ String.fromInt index
