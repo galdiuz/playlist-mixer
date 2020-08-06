@@ -249,7 +249,12 @@ privacyPolicyUrl state =
 
 videoListPageSize : Int
 videoListPageSize =
-    30
+    50
+
+
+videoListScrollSize : Int
+videoListScrollSize =
+    20
 
 
 decodeScrollPos : Decode.Decoder ScrollPos

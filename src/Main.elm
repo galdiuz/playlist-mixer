@@ -800,7 +800,7 @@ updateVideoList msg state =
         Msg.ScrollEarlier prevY ->
             { state
                 | currentListIndex =
-                    state.currentListIndex - 10
+                    state.currentListIndex - App.videoListScrollSize
                         |> Basics.max 0
             }
                 |> Cmd.Extra.withCmd
@@ -817,7 +817,7 @@ updateVideoList msg state =
         Msg.ScrollLater prevY ->
             { state
                 | currentListIndex =
-                    state.currentListIndex + 10
+                    state.currentListIndex + App.videoListScrollSize
                         |> Basics.min (Dict.size state.videoList - App.videoListPageSize)
             }
                 |> Cmd.Extra.withCmd
@@ -1172,7 +1172,7 @@ updateCurrentListIndex : State -> State
 updateCurrentListIndex state =
     { state
         | currentListIndex =
-            state.currentVideoIndex - 3
+            state.currentVideoIndex - 5
                 |> Basics.max 0
                 |> Basics.min (Dict.size state.videoList - App.videoListPageSize)
     }
