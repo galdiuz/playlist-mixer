@@ -751,7 +751,7 @@ updateVideoList msg state =
         Msg.Scroll scroll ->
             let
                 scrollOffset =
-                    50
+                    250
 
                 isSearching =
                     not <| String.isEmpty state.searchValue
@@ -1172,7 +1172,7 @@ updateCurrentListIndex : State -> State
 updateCurrentListIndex state =
     { state
         | currentListIndex =
-            state.currentVideoIndex - 5
+            state.currentVideoIndex - 10
                 |> Basics.max 0
                 |> Basics.min (Dict.size state.videoList - App.videoListPageSize)
     }
