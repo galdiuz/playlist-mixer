@@ -211,24 +211,23 @@ playlistDecoder =
 playlistItemDecoder : Decode.Decoder Video
 playlistItemDecoder =
     Field.requireAt [ "contentDetails", "videoId" ] Decode.string <| \id ->
-    Field.requireAt [ "snippet", "title" ] Decode.string <| \title ->
-    Field.requireAt [ "snippet", "position" ] Decode.int <| \position ->
-    Field.requireAt [ "snippet", "playlistId" ] Decode.string <| \playlistId ->
     Field.requireAt [ "id" ] Decode.string <| \itemId ->
     Field.attemptAt [ "contentDetails", "note" ] Decode.string <| \rawNote ->
+    Field.requireAt [ "snippet", "playlistId" ] Decode.string <| \playlistId ->
+    Field.requireAt [ "snippet", "position" ] Decode.int <| \position ->
+    Field.requireAt [ "snippet", "title" ] Decode.string <| \title ->
     let
-        (note, startAt, endAt) =
+        (note, segments) =
             decodeNote rawNote
     in
     Decode.succeed
         { id = id
-        , title = title
-        , startAt = startAt
-        , endAt = endAt
-        , position = position
-        , playlistId = playlistId
         , itemId = itemId
         , note = note
+        , playlistId = playlistId
+        , position = position
+        , segments = segments
+        , title = title
         }
 
 
@@ -279,64 +278,107 @@ updatePlaylistVideoBody video =
         ]
 
 
-decodeNote : Maybe String -> (Maybe String, Maybe Int, Maybe Int)
+decodeNote : Maybe String -> ( Maybe String, List Youtube.Video.Segment )
 decodeNote maybeString =
-    case (maybeString, noteRegex) of
-        (Just string, Just regex) ->
+    case ( maybeString, noteRegex, legacyNoteRegex ) of
+        ( Just string, Just regex, Just legacyRegex ) ->
             string
                 |> Regex.find regex
                 |> List.head
                 |> Maybe.map
                     (\{submatches} ->
                         case submatches of
-                            [_, note, _, startAt, _, endAt] ->
-                                ( note
-                                , Maybe.andThen String.toInt startAt
-                                , Maybe.andThen String.toInt endAt
-                                )
+                            [ _, note, Just segmentString ] ->
+                                case Decode.decodeString (Decode.list segmentDecoder) segmentString of
+                                    Ok segments ->
+                                        ( note, segments )
+
+                                    Err _ ->
+                                        ( note, [] )
 
                             _ ->
-                                (Just string, Nothing, Nothing)
+                                ( Just string, [] )
                     )
-                |> Maybe.withDefault (Just string, Nothing, Nothing)
+                |> Maybe.withDefault (decodeLegacyNote string legacyRegex)
 
         _ ->
-            (Nothing, Nothing, Nothing)
+            ( Nothing, [] )
 
 
 noteRegex : Maybe Regex
 noteRegex =
+    Regex.fromString "^((.*)\\n)?(\\[.*\\])$"
+
+
+legacyNoteRegex : Maybe Regex
+legacyNoteRegex =
     Regex.fromString "^((.*)\\n\\n)?\\[\\[(s=(\\d+))?(e=(\\d+))?\\]\\]$"
+
+
+decodeLegacyNote : String -> Regex -> ( Maybe String, List Youtube.Video.Segment )
+decodeLegacyNote string regex =
+    string
+        |> Regex.find regex
+        |> List.head
+        |> Maybe.map
+            (\{submatches} ->
+                case submatches of
+                    [ _, note, _, startAt, _, endAt ] ->
+                        ( note
+                        , [ { endAt = Maybe.andThen String.toInt endAt
+                            , startAt = Maybe.andThen String.toInt startAt
+                            , title = Nothing
+                            }
+                          ]
+                        )
+
+                    _ ->
+                        ( Just string, [] )
+            )
+        |> Maybe.withDefault ( Just string, [] )
+
+
+segmentDecoder : Decode.Decoder Youtube.Video.Segment
+segmentDecoder =
+    Field.attempt "e" (Decode.int) <| \endAt ->
+    Field.attempt "s" (Decode.int) <| \startAt ->
+    Field.attempt "t" (Decode.string) <| \title ->
+    Decode.succeed
+        { endAt = endAt
+        , startAt = startAt
+        , title = title
+        }
 
 
 encodeNote : Video -> Encode.Value
 encodeNote video =
     Encode.string
-        <| case (video.note, formatTimes video) of
-            (Just note, Just times) ->
-                note ++ "\n\n" ++ times
-
-            (Just note, Nothing) ->
-                note
-
-            (Nothing, Just times) ->
-                times
-
-            (Nothing, Nothing) ->
+        <| case ( video.note, video.segments ) of
+            ( Nothing, [] ) ->
                 ""
 
+            ( Just note, [] ) ->
+                note
 
-formatTimes : Video -> Maybe String
-formatTimes video =
-    case (video.startAt, video.endAt) of
-        (Just startAt, Just endAt) ->
-            Just <| "[[s=" ++ String.fromInt startAt ++ "e=" ++ String.fromInt endAt ++ "]]"
+            ( Nothing, segments ) ->
+                Encode.encode 0 (Encode.list encodeSegment segments)
 
-        (Just startAt, Nothing) ->
-            Just <| "[[s=" ++ String.fromInt startAt ++ "]]"
+            ( Just note, segments ) ->
+                note ++ "\n" ++ Encode.encode 0 (Encode.list encodeSegment segments)
 
-        (Nothing, Just endAt) ->
-            Just <| "[[e=" ++ String.fromInt endAt ++ "]]"
 
-        (Nothing, Nothing) ->
-            Nothing
+encodeSegment : Youtube.Video.Segment -> Encode.Value
+encodeSegment segment =
+    [ ( "s", Maybe.map Encode.int segment.startAt )
+    , ( "e", Maybe.map Encode.int segment.endAt )
+    , ( "t", Maybe.map Encode.string segment.title )
+    ]
+        |> List.filterMap
+            (\( field, value ) ->
+                Maybe.map
+                    (\v ->
+                        ( field, v )
+                    )
+                    value
+            )
+        |> Encode.object

@@ -704,8 +704,9 @@ updateVideoList msg state =
                                         |> Cmd.Extra.withCmd
                                             ( Youtube.Api.updatePlaylistVideo
                                                 { video
-                                                    | startAt = startAt
-                                                    , endAt = endAt
+                                                    | segments = []
+                                                    -- | startAt = startAt
+                                                    -- , endAt = endAt
                                                     , note =
                                                         if String.isEmpty listItem.note then
                                                             Nothing
@@ -927,9 +928,11 @@ updateVideoList msg state =
                                 { listItem
                                     | editOpen = bool
                                     , startAtError = Nothing
-                                    , startAtValue = App.secondsToString listItem.video.startAt
+                                    , startAtValue = ""
+                                    -- , startAtValue = App.secondsToString listItem.video.startAt
                                     , endAtError = Nothing
-                                    , endAtValue = App.secondsToString listItem.video.endAt
+                                    , endAtValue = ""
+                                    -- , endAtValue = App.secondsToString listItem.video.endAt
                                     , note = Maybe.withDefault "" listItem.video.note
                                 }
                             )
@@ -1147,9 +1150,12 @@ playCurrentVideo state =
                 |> Cmd.Extra.withCmd
                     ( Ports.playVideo
                         { videoId = listItem.video.id
-                        , startSeconds = listItem.video.startAt
-                        , endSeconds = listItem.video.endAt
+                        , startSeconds = Nothing
+                        , endSeconds = Nothing
+                        -- , startSeconds = listItem.video.startAt
+                        -- , endSeconds = listItem.video.endAt
                         }
+
                     )
 
         Nothing ->

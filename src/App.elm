@@ -7,6 +7,7 @@ module App exposing
     -- , Token
     -- )
 
+import Array exposing (Array)
 import Browser.Navigation as Navigation
 import Dict exposing (Dict)
 import Element
@@ -58,7 +59,8 @@ type alias State =
     , time : Int
     , token : Maybe Token
     , tokenStorageKey : String
-    , videoList : Dict Int VideoListItem
+    , videos : Dict String Video
+    , videoList : Array VideoListItem
     , youtubeApiReady : Bool
     }
 
@@ -100,14 +102,20 @@ type alias PlaylistListItem =
 
 type alias VideoListItem =
     { editOpen : Bool
-    , endAtError : Maybe String
-    , endAtValue : String
+    , editSegments : Array VideoListItemSegment
     , error : Maybe PlayerError
-    , note : String
     , playlist : Playlist
+    , segmentIndex : Int
+    , videoId : String
+    }
+
+
+type alias VideoListItemSegment =
+    { endAtError : Maybe String
+    , endAtValue : String
+    , note : String
     , startAtError : Maybe String
     , startAtValue : String
-    , video : Video
     }
 
 
@@ -136,33 +144,42 @@ darkTheme =
     }
 
 
-makeVideoListItem : Playlist -> Video -> VideoListItem
-makeVideoListItem playlist video =
+makeVideoListItems : Playlist -> Video -> List VideoListItem
+makeVideoListItems playlist video =
+    case video.segments of
+        [] ->
+            [ makeVideoListItem playlist video 0 ]
+
+        segments ->
+            List.range 0 (List.length segments - 1)
+                |> List.map (makeVideoListItem playlist video)
+
+
+makeVideoListItem : Playlist -> Video -> Int -> VideoListItem
+makeVideoListItem playlist video index =
     { editOpen = False
-    , endAtError = Nothing
-    , endAtValue = ""
+    , editSegments = Array.empty
     , error = Nothing
-    , note = ""
     , playlist = playlist
-    , startAtError = Nothing
-    , startAtValue = ""
-    , video = video
+    , segmentIndex = index
+    , videoId = video.id
     }
 
 
 encodeVideoListItem : VideoListItem -> Encode.Value
 encodeVideoListItem item =
     Encode.object
-        [ ( "video", Video.encode item.video )
-        , ( "playlist", Playlist.encode item.playlist )
-        ]
+        []
+        -- [ ( "video", Video.encode item.video )
+        -- , ( "playlist", Playlist.encode item.playlist )
+        -- ]
 
 
-videoListItemDecoder : Decode.Decoder VideoListItem
-videoListItemDecoder =
-    Field.require "video" Video.decoder <| \video ->
-    Field.require "playlist" Playlist.decoder <| \playlist ->
-    Decode.succeed (makeVideoListItem playlist video)
+-- videoListItemDecoder : Decode.Decoder VideoListItem
+-- videoListItemDecoder =
+--     Field.require "video" Video.decoder <| \video ->
+--     Field.require "playlist" Playlist.decoder <| \playlist ->
+--     Decode.succeed (makeVideoListItem playlist video)
 
 
 encodePlaylist : Int -> List VideoListItem -> Encode.Value
@@ -176,10 +193,11 @@ encodePlaylist current items =
 decodePlaylist : Decode.Decoder { current : Int, items : List VideoListItem }
 decodePlaylist =
     Field.require "current" Decode.int <| \current ->
-    Field.require "items" (Decode.list videoListItemDecoder) <| \items ->
+    -- Field.require "items" (Decode.list videoListItemDecoder) <| \items ->
     Decode.succeed
         { current = current
-        , items = items
+        -- , items = items
+        , items = []
         }
 
 
@@ -214,7 +232,7 @@ decodeToken =
 
 nextIndex : State -> Int
 nextIndex state =
-    if Dict.size state.videoList > state.currentVideoIndex + 1 then
+    if Array.length state.videoList > state.currentVideoIndex + 1 then
         state.currentVideoIndex + 1
     else
         0
@@ -223,7 +241,7 @@ nextIndex state =
 previousIndex : State -> Int
 previousIndex state =
     if state.currentVideoIndex == 0 then
-        Dict.size state.videoList - 1
+        Array.length state.videoList - 1
     else
         max 0 (state.currentVideoIndex - 1)
 
@@ -293,3 +311,18 @@ clientHeight =
         [ Decode.at [ "target", "clientHeight" ] Decode.int
         , Decode.at [ "target", "scrollingElement", "clientHeight" ] Decode.int
         ]
+
+
+getVideoItem : State -> Int -> Maybe { video : Video, listItem : VideoListItem }
+getVideoItem state index =
+    Array.get index state.videoList
+        |> Maybe.andThen
+            (\listItem ->
+                Dict.get listItem.videoId state.videos
+                    |> Maybe.map
+                        (\video ->
+                            { video = video
+                            , listItem = listItem
+                            }
+                        )
+            )

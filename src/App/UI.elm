@@ -5,6 +5,8 @@ module App.UI exposing
     , videoListVideoId
     )
 
+import Array
+import Array.Extra
 import Dict
 import Element as El exposing (Element)
 import Element.Background as Background
@@ -90,7 +92,7 @@ render state =
 renderHeader : State -> Element msg
 renderHeader state =
     El.column
-        [ El.paddingEach { paddingZero | top = 30 }
+        [ El.paddingEach { paddingZero | top = 15 }
         , El.spacing 10
         , El.width El.fill
         ]
@@ -112,7 +114,7 @@ renderFooter : State -> Element Msg
 renderFooter state =
     El.column
         [ El.width El.fill
-        , El.paddingEach { paddingZero | bottom = 10 }
+        , El.paddingEach { paddingZero | bottom = 15 }
         , El.spacing 20
         ]
         [ renderSpacer state
@@ -157,7 +159,7 @@ renderSpacer state =
 
 renderWelcomeMessage : State -> Element msg
 renderWelcomeMessage state =
-    if Dict.isEmpty state.videoList then
+    if Array.isEmpty state.videoList then
         El.paragraph
             []
             [ El.text
@@ -192,7 +194,7 @@ renderPlaylistMenu state =
 
 renderPlaylistMenuResume : State -> Element Msg
 renderPlaylistMenuResume state =
-    if state.playlistInStorage && Dict.isEmpty state.videoList then
+    if state.playlistInStorage && Array.isEmpty state.videoList then
         El.column
             [ El.spacing 10
             ]
@@ -360,7 +362,7 @@ renderPlaylistMenuSignIn state =
 
 renderPlayer : State -> Element Msg
 renderPlayer state =
-    if Dict.isEmpty state.videoList then
+    if Array.isEmpty state.videoList then
         El.none
     else
         El.column
@@ -374,30 +376,30 @@ renderPlayer state =
                 , El.centerX
                 ]
                 El.none
-            , case Dict.get state.currentVideoIndex state.videoList of
-                Just listItem ->
+            , case App.getVideoItem state state.currentVideoIndex of
+                Just { listItem, video } ->
                     El.column
                         []
                         [ El.text "Currently playing:"
                         , El.paragraph
                             [ Font.size 28
                             ]
-                            [ El.text listItem.video.title
+                            [ El.text video.title
                             ]
                         , renderTimeRange listItem
                         ]
 
                 Nothing ->
                     El.none
-            , case Dict.get (App.nextIndex state) state.videoList of
-                Just listItem ->
+            , case App.getVideoItem state (App.nextIndex state) of
+                Just { video } ->
                     El.column
                         []
                         [ El.text "Up next:"
                         , El.paragraph
                             [ Font.size 20
                             ]
-                            [ El.text listItem.video.title
+                            [ El.text video.title
                             ]
                         ]
 
@@ -422,25 +424,26 @@ renderPlayer state =
 
 renderTimeRange : App.VideoListItem -> Element msg
 renderTimeRange listItem =
-    case ( listItem.video.startAt, listItem.video.endAt ) of
-        ( Just startAt, Just endAt ) ->
-            "({{}} - {{}})"
-                |> String.Format.value (App.secondsToString <| Just startAt)
-                |> String.Format.value (App.secondsToString <| Just endAt)
-                |> El.text
+    El.none
+    -- case ( listItem.video.startAt, listItem.video.endAt ) of
+    --     ( Just startAt, Just endAt ) ->
+    --         "({{}} - {{}})"
+    --             |> String.Format.value (App.secondsToString <| Just startAt)
+    --             |> String.Format.value (App.secondsToString <| Just endAt)
+    --             |> El.text
 
-        ( Just startAt, Nothing ) ->
-            "({{}} - End)"
-                |> String.Format.value (App.secondsToString <| Just startAt)
-                |> El.text
+    --     ( Just startAt, Nothing ) ->
+    --         "({{}} - End)"
+    --             |> String.Format.value (App.secondsToString <| Just startAt)
+    --             |> El.text
 
-        ( Nothing, Just endAt ) ->
-            "(0:00 - {{}})"
-                |> String.Format.value (App.secondsToString <| Just endAt)
-                |> El.text
+    --     ( Nothing, Just endAt ) ->
+    --         "(0:00 - {{}})"
+    --             |> String.Format.value (App.secondsToString <| Just endAt)
+    --             |> El.text
 
-        ( Nothing, Nothing ) ->
-            El.none
+    --     ( Nothing, Nothing ) ->
+    --         El.none
 
 
 renderPlaylistList : State -> Element Msg
@@ -453,7 +456,7 @@ renderPlaylistList state =
                 not <| List.isEmpty (List.filter .checked (Dict.values state.playlistList))
 
             hasPlaylist =
-                not <| Dict.isEmpty state.videoList
+                not <| Array.isEmpty state.videoList
         in
         El.column
             [ El.paddingXY 0 5
@@ -563,7 +566,7 @@ renderPlaylistList state =
 
 renderVideoList : State -> Element Msg
 renderVideoList state =
-    if Dict.isEmpty state.videoList then
+    if Array.isEmpty state.videoList then
         El.none
       else
         let
@@ -572,22 +575,32 @@ renderVideoList state =
 
             videoList =
                 if isSearching then
-                    List.filter
-                        (\( _, listItem ) ->
+                    Array.filter
+                        (\listItem ->
                             state.searchValue
                                 |> String.words
                                 |> List.all
                                     (\word ->
                                         String.contains
                                             (String.toLower word)
-                                            (String.toLower listItem.video.title)
+                                            (Dict.get listItem.videoId
+                                                |> Maybe.map .title
+                                                |> Maybe.map String.toLower
+                                                |> Maybe.withDefault ""
+                                            )
                                     )
                         )
-                        (Dict.toList state.videoList)
+                        state.videoList
+                        |> Array.indexedMapToList Tuple.pair
                 else
-                    Dict.toList state.videoList
-                        |> List.drop state.currentListIndex
-                        |> List.take App.videoListPageSize
+                    Array.slice
+                        state.currentListIndex
+                        (state.currentListIndex + App.videoListPageSize)
+                        state.videoList
+                        |> Array.Extra.indexedMapToList
+                            (\index listItem ->
+                                ( index + state.currentListIndex, listItem )
+                            )
         in
         El.column
             [ El.width El.fill
@@ -602,19 +615,19 @@ renderVideoList state =
                         |> String.Format.value
                             (String.fromInt
                                 (min
-                                    (Dict.size state.videoList)
+                                    (Array.length state.videoList)
                                     (state.currentListIndex + App.videoListPageSize)
                                 )
                             )
-                        |> String.Format.value (String.fromInt <| Dict.size state.videoList)
+                        |> String.Format.value (String.fromInt <| Array.length state.videoList)
                         |> El.text
-                  else if List.length videoList > App.videoListPageSize then
+                  else if Array.length videoList > App.videoListPageSize then
                     "Showing first {{}} matches"
                         |> String.Format.value (String.fromInt App.videoListPageSize)
                         |> El.text
                   else
                     "Showing {{}} matches"
-                        |> String.Format.value (String.fromInt <| List.length videoList)
+                        |> String.Format.value (String.fromInt <| Array.length videoList)
                         |> El.text
                 , Input.text
                     [ Background.color state.theme.bg
@@ -666,7 +679,7 @@ renderVideoList state =
                             (\( index, listItem ) ->
                                 Keyed.el
                                     []
-                                    ( listItem.video.id
+                                    ( listItem.videoId ++ String.fromInt listItem.segmentIndex
                                     , Lazy.lazy (renderVideoListItem state index) listItem
                                     )
                             )
@@ -695,7 +708,7 @@ renderVideoListItem state index listItem =
             [ El.paragraph
                 [ maybeAttribute (index == state.currentVideoIndex) Font.bold
                 ]
-                [ El.text listItem.video.title
+                [ El.text <| Maybe.withDefault "" <| Dict.get listItem.videoId
                 ]
             , El.row
                 [ El.spacing 10
@@ -747,46 +760,47 @@ renderVideoListItemEdit state index listItem =
         El.column
             [ El.spacing 10
             ]
-            [ renderTimeInput
-                { error = listItem.startAtError
-                , label = "Start:"
-                , onChange = Msg.VideoList << Msg.SetVideoStartAt index
-                , onLoseFocus = Msg.VideoList <| Msg.ValidateVideoStartAt index
-                , value = listItem.startAtValue
-                }
-                state
-            , renderTimeInput
-                { error = listItem.endAtError
-                , label = "End:"
-                , onChange = Msg.VideoList << Msg.SetVideoEndAt index
-                , onLoseFocus = Msg.VideoList <| Msg.ValidateVideoEndAt index
-                , value = listItem.endAtValue
-                }
-                state
-            , Input.multiline
-                [ Background.color state.theme.bg
-                ]
-                { label = Input.labelLeft [] <| El.text "Note:"
-                , onChange = Msg.VideoList << Msg.SetVideoNote index
-                , placeholder = Nothing
-                , spellcheck = False
-                , text = listItem.note
-                }
-            , El.row
-                [ El.spacing 10
-                ]
-                [ Input.button
-                    buttonStyle
-                    { onPress = Just <| Msg.VideoList <| Msg.SaveVideoTimes index
-                    , label = El.text "Save"
-                    }
-                , Input.button
-                    buttonStyle
-                    { onPress = Just <| Msg.VideoList <| Msg.ToggleEditVideo index False
-                    , label = El.text "Cancel"
-                    }
-                ]
-            ]
+            []
+            -- [ renderTimeInput
+            --     { error = listItem.startAtError
+            --     , label = "Start:"
+            --     , onChange = Msg.VideoList << Msg.SetVideoStartAt index
+            --     , onLoseFocus = Msg.VideoList <| Msg.ValidateVideoStartAt index
+            --     , value = listItem.startAtValue
+            --     }
+            --     state
+            -- , renderTimeInput
+            --     { error = listItem.endAtError
+            --     , label = "End:"
+            --     , onChange = Msg.VideoList << Msg.SetVideoEndAt index
+            --     , onLoseFocus = Msg.VideoList <| Msg.ValidateVideoEndAt index
+            --     , value = listItem.endAtValue
+            --     }
+            --     state
+            -- , Input.multiline
+            --     [ Background.color state.theme.bg
+            --     ]
+            --     { label = Input.labelLeft [] <| El.text "Note:"
+            --     , onChange = Msg.VideoList << Msg.SetVideoNote index
+            --     , placeholder = Nothing
+            --     , spellcheck = False
+            --     , text = listItem.note
+            --     }
+            -- , El.row
+            --     [ El.spacing 10
+            --     ]
+            --     [ Input.button
+            --         buttonStyle
+            --         { onPress = Just <| Msg.VideoList <| Msg.SaveVideoTimes index
+            --         , label = El.text "Save"
+            --         }
+            --     , Input.button
+            --         buttonStyle
+            --         { onPress = Just <| Msg.VideoList <| Msg.ToggleEditVideo index False
+            --         , label = El.text "Cancel"
+            --         }
+            --     ]
+            -- ]
     else
         El.column
             [ El.spacing 10
