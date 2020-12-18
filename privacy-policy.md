@@ -1,7 +1,10 @@
 # Playlist Mixer - Privacy policy
 
 Playlist Mixer does not collect any personal data. Any data retrieved from the user's YouTube
-account is only ever stored locally in the user's browser, and never sent elsewhere.
+account by the app is only ever stored locally in the user's browser, and never sent elsewhere.
+Playlist Mixer uses YouTube's API services, which are subject to
+[YouTube's Terms of Service](https://www.youtube.com/t/terms) and
+[Google's Privacy Policy](https://policies.google.com/privacy).
 
 
 ## Usage of YouTube API scopes
