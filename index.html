@@ -1,0 +1,137 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="google-site-verification" content="PN1qz1isBNDvr24NEyfcxU214WMwG_LJ6GHqG0nj_IU" />
+    <title>YouTube Playlist</title>
+    <script src="app-3b7858535463acc47e3e6c8cd448fa846795b2b3.js"></script>
+    <script src="https://www.youtube.com/iframe_api"></script>
+</head>
+
+<body>
+    <div id="elm"></div>
+    <!-- <script src="https://unpkg.com/elm-debug-transformer@latest/dist/elm-console-debug.js"></script> -->
+    <!-- <script>ElmConsoleDebug.register({simple_mode: true, debug: false, limit: 10000});</script> -->
+    <script>
+        const bytesStorageKey = 'bytes';
+        const tokenStorageKey = 'token';
+        const playlistStorageKey = 'playlist';
+        const oauthClientId = '1004146990872-svm4c3j6nof3afhjbjsf4mask09kc85n.apps.googleusercontent.com';
+        var player;
+        var noOp = () => {};
+        var popup;
+
+        var app = Elm.Main.init({
+            node: document.getElementById('elm'),
+            flags: {
+                bytes: getBytes(),
+                playlistInStorage: localStorage.getItem(playlistStorageKey) ? true : false,
+                playlistStorageKey: playlistStorageKey,
+                oauthClientId: oauthClientId,
+                time: Date.now(),
+                token: getToken(),
+                tokenStorageKey: tokenStorageKey,
+            },
+        });
+
+        function onYouTubeIframeAPIReady() {
+            app.ports && app.ports.onYouTubeApiReady && app.ports.onYouTubeApiReady.send();
+        };
+
+        function getBytes() {
+            const bytes = sessionStorage.getItem(bytesStorageKey);
+            return bytes ? bytes.split(',').map(x => parseInt(x, 10)) : [];
+        }
+
+        function getToken() {
+            const token = localStorage.getItem(tokenStorageKey);
+            return token ? JSON.parse(token) : null;
+        }
+
+        window.addEventListener('storage', event => {
+            if (event.storageArea !== localStorage || !event.key) {
+                return;
+            }
+
+            if (event.newValue === null) {
+                app.ports && app.ports.storageDeleted && app.ports.storageDeleted.send(event.key);
+            } else {
+                try {
+                    var val = JSON.parse(event.newValue);
+                    app.ports && app.ports.storageChanged && app.ports.storageChanged.send({
+                        key: event.key,
+                        value: val,
+                    });
+                } catch {}
+            }
+        }, false);
+
+        app.ports && app.ports.createPlayer && app.ports.createPlayer.subscribe(element => {
+            if (player) {
+                app.ports && app.ports.onPlayerReady && app.ports.onPlayerReady.send();
+
+                return;
+            }
+
+            player = new YT.Player(element, {
+                events: {
+                    'onReady': (app.ports && app.ports.onPlayerReady) ? app.ports.onPlayerReady.send : noOp,
+                    'onStateChange': (app.ports && app.ports.onPlayerStateChange) ? app.ports.onPlayerStateChange.send : noOp,
+                    'onError': (app.ports && app.ports.onPlayerError) ? app.ports.onPlayerError.send : noOp,
+                },
+            });
+        });
+
+        app.ports && app.ports.playVideo && app.ports.playVideo.subscribe(data => {
+            player.loadVideoById(data);
+        });
+
+        app.ports && app.ports.saveToStorage && app.ports.saveToStorage.subscribe(data => {
+            localStorage.setItem(
+                data.key,
+                JSON.stringify(data.value)
+            );
+            app.ports && app.ports.storageChanged && app.ports.storageChanged.send({
+                key: data.key,
+                value: data.value,
+            });
+        });
+
+        app.ports && app.ports.loadFromStorage && app.ports.loadFromStorage.subscribe(key => {
+            try {
+                var val = JSON.parse(localStorage.getItem(key));
+                app.ports && app.ports.receiveFromStorage && app.ports.receiveFromStorage.send({
+                    key: key,
+                    value: val,
+                });
+            } catch {}
+        });
+
+        app.ports && app.ports.removeFromStorage && app.ports.removeFromStorage.subscribe(key => {
+            localStorage.removeItem(key);
+            app.ports && app.ports.storageDeleted && app.ports.storageDeleted.send(key);
+        });
+
+        app.ports && app.ports.generateRandomBytes && app.ports.generateRandomBytes.subscribe(n => {
+            const buffer = new Uint8Array(n);
+            crypto.getRandomValues(buffer);
+            const bytes = Array.from(buffer);
+            sessionStorage.setItem(bytesStorageKey, bytes);
+            app.ports && app.ports.receiveRandomBytes && app.ports.receiveRandomBytes.send(bytes);
+        });
+
+        app.ports && app.ports.openPopup && app.ports.openPopup.subscribe(url => {
+            popup = window.open(url, 'popup', 'height=600,width=450');
+        });
+
+        app.ports && app.ports.closePopup && app.ports.closePopup.subscribe(d => {
+            popup && popup.close();
+        });
+
+        app.ports && app.ports.consoleErr && app.ports.consoleErr.subscribe(msg => console.error(msg));
+
+        app.ports && app.ports.onYouTubeApiReady || console.warn('Port onYouTubeApiReady not found.');
+        app.ports && app.ports.onPlayerStateChange || console.warn('Port onPlayerStateChange not found.');
+    </script>
+</body>
+</html>
